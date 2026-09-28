@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "esnext",
+    "lib": [
+      "esnext"
+    ],
+    /* Modules */
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "types": [
+      "bun"
+    ],
+    /* Path Aliases */
+    "paths": {},
+    /* Emit & Project Structure */
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "noEmit": true,
+    "isolatedModules": true,
+    "declaration": false,
+    "importHelpers": true,
+    "removeComments": true,
+    /* Interop Constraints */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    /* Type Checking */
+    "strict": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": false,
+    "skipLibCheck": true,
+  },
+  "include": [
+    "./src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

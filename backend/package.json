@@ -1,0 +1,31 @@
+{
+  "name": "backend",
+  "engines": {
+    "bun": "1.4.x"
+  },
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "build": "tsup",
+    "test": "bun run build && bun run dist/index.js --development",
+    "lint": "eslint 'src/**/*.ts' --fix",
+    "format": "prettier --write 'src/**/*.ts' --config .prettierrc.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "hono": "^4.13.10",
+    "mysql2": "^3.24.4",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@trivago/prettier-plugin-sort-imports": "^6.0.2",
+    "eslint": "^10.11.0",
+    "eslint-plugin-import": "^2.32.0",
+    "prettier": "^3.9.9",
+    "tsc-alias": "^1.9.5",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1"
+  },
+  "packageManager": "bun@1.4.2"
+}
