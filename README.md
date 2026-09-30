@@ -12,3 +12,27 @@
 * **Frontend:** Next.js
 * **Backend:** Hono
 * **Real-time Communication:** Socket.io (สำหรับจัดการการซิงค์สถานะวิดีโอระหว่าง Host และ Client)
+
+## ⚙️ How it Works
+
+โปรเจค YouStream รองรับการสตรีมวิดีโอ 2 รูปแบบหลัก ซึ่งมีกลไกการทำงานเบื้องหลังดังนี้:
+
+### 1. การเปิดวิดีโอจาก YouTube (YouTube Syncing)
+ระบบจะไม่ได้ทำการดาวน์โหลดวิดีโอ แต่จะใช้วิธีการซิงค์ **Video ID** และ **สถานะการเล่น** ผ่าน WebSockets
+
+*   **Step 1 - Input:** ผู้ควบคุมห้อง (Host) นำลิงก์ YouTube มาวางบนหน้าเว็บ (Next.js)
+*   **Step 2 - Extract:** Frontend จะทำการสกัดรหัสวิดีโอ (Video ID) ออกมาจากลิงก์
+*   **Step 3 - Emit:** เครื่องของ Host ส่ง Video ID และสถานะการเล่น (Play, Pause, Seek) ไปยัง Backend (Hono) ผ่าน `Socket.io`
+*   **Step 4 - Broadcast:** Backend ทำหน้าที่เป็นตัวกลาง กระจาย (Broadcast) ข้อมูลชุดนี้ไปยังผู้ชมทุกคนที่เชื่อมต่ออยู่ในห้องเดียวกัน
+*   **Step 5 - Sync:** ตัวเล่นวิดีโอ (YouTube IFrame API) ฝั่งผู้ชมจะเปลี่ยนวิดีโอและซิงค์เวลาให้ตรงกับ Host แบบเรียลไทม์
+
+---
+
+### 2. การนำไฟล์วิดีโอมาเอง (Local File via Server Upload)
+สำหรับการนำไฟล์จากเครื่องคอมพิวเตอร์มาเปิด ระบบจะใช้วิธีเปลี่ยนไฟล์ให้เป็น Public URL ก่อน เพื่อให้ทุกคนในห้องสามารถเข้าถึงไฟล์เดียวกันได้
+
+*   **Step 1 - Select & Upload:** Host เลือกไฟล์วิดีโอจากเครื่อง (รองรับ .mp4, .webm ฯลฯ **ขนาดไฟล์จำกัดไม่เกิน 500MB**) และทำการอัปโหลดผ่าน API ไปยัง Backend (หรือ Cloud Storage)
+*   **Step 2 - Get URL:** เมื่ออัปโหลดเสร็จสมบูรณ์ Server จะตอบกลับ (Response) เป็น URL ของไฟล์วิดีโอนั้นกลับมาที่ Host
+*   **Step 3 - Emit URL:** เครื่องของ Host จะนำ URL ที่ได้ ส่งเข้าไปในห้องผ่าน `Socket.io`
+*   **Step 4 - Broadcast:** Backend กระจาย URL นั้นให้ผู้ชมทุกคนในห้อง
+*   **Step 5 - Stream & Sync:** เบราว์เซอร์ฝั่งผู้ชมจะนำ URL ไปใส่ในแท็ก `<video>` เพื่อสตรีมไฟล์จาก Server พร้อมทั้งซิงค์คำสั่ง (Play, Pause, Volume, Seek) จาก Host แบบเรียลไทม์
