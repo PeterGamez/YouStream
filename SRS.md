@@ -75,7 +75,7 @@
 | รหัส (ID) | โมดูล (Module) | รายละเอียดฟังก์ชันการทำงาน (Description) | ลำดับความสำคัญ |
 | :---: | :--- | :--- | :---: |
 | **FR-01** | Authentication | ผู้ใช้สามารถลงทะเบียน (Sign up) เข้าสู่ระบบ (Sign in) ด้วยอีเมลและรหัสผ่าน หรือผ่าน OAuth 2.0 (Google) โดยระบบจะกำหนด Avatar URL ให้อัตโนมัติจาก Google Account หรือดึงจาก [Gravatar](https://gravatar.com/) ผ่านแฮชของอีเมล | High |
-| **FR-02** | Authentication | ระบบทำการเข้ารหัสรหัสผ่านด้วย `bcrypt` ก่อนจัดเก็บ และออก JWT Access Token / Refresh Token สำหรับยืนยันตัวตน | High |
+| **FR-02** | Authentication | ระบบทำการเข้ารหัสรหัสผ่านด้วย `bcrypt` ก่อนจัดเก็บ และออก JSON Web Token (JWT) สำหรับยืนยันตัวตน | High |
 | **FR-03** | User Profile | ผู้ใช้สามารถดูข้อมูลโปรไฟล์ (Display Name, Avatar URL) และเปลี่ยนรหัสผ่านได้ โดย Avatar URL จะดึงจาก Google Account หรือ Gravatar (https://gravatar.com/) | Medium |
 | **FR-04** | Room Directory | หน้ารวมห้อง (Lobby) แสดงรายการห้องที่กำลังเปิดสตรีมอยู่ (Active Rooms) พร้อมชื่อห้อง, ชื่อ Host, ประเภทสื่อที่กำลังเล่น, และจำนวนผู้ชมปัจจุบัน | High |
 | **FR-05** | Room Directory | ผู้ใช้สามารถค้นหาห้องตามชื่อห้อง หรือค้นหาด้วยรหัสห้องตัวเลข 8 หลัก (Room Code) หรือกรองตามสถานะ/ประเภทของสื่อได้ | Medium |
@@ -209,7 +209,7 @@ sequenceDiagram
 
 ระบบแบ่งการจัดการข้อมูลในฝั่ง Backend ออกเป็น 2 ส่วนตามสถาปัตยกรรม High-Performance Real-Time:
 1. **MariaDB / MySQL (Persistent Database):** สำหรับจัดเก็บข้อมูลเชิงสัมพันธ์หลักของระบบอย่างถาวร (Users, Rooms, Media) ตาม ER Diagram และ Data Dictionary ในหัวข้อที่ 1 และ 2
-2. **Redis (In-Memory Data Store & Cache - ใช้เฉพาะฝั่ง Backend ผ่าน `ioredis`):** สำหรับจัดเก็บและจัดการข้อมูลที่มีความถี่ในการอ่าน/เขียนสูงและข้อมูลชั่วคราว (Transient State) ทั้งหมด ได้แก่ สถานะการเล่นวิดีโอเรียลไทม์ (`playback_states`), รายชื่อผู้ใช้ออนไลน์ (`room_participants`), ประวัติข้อความแชทในห้อง (`room_messages`), รายชื่อห้องที่กำลังเปิด (`active_rooms`), และระบบป้องกันสแปม (`ratelimit:chat`) ตามรายละเอียดในหัวข้อที่ 3 เพื่อลดภาระ Disk I/O บน MariaDB ให้เหลือเฉพาะข้อมูลถาวร และทำให้ระบบตอบสนองได้เร็วระดับ Sub-millisecond
+2. **Redis (In-Memory Data Store & Cache - ใช้เฉพาะฝั่ง Backend ผ่าน `ioredis`):** สำหรับจัดเก็บและจัดการข้อมูลสถานะแบบเรียลไทม์ทั้งหมด (Real-time Video Playback State, Active Participants Presence, Ephemeral Room Messages, Active Rooms List, และ Chat Rate Limiting) ตามรายละเอียดในหัวข้อที่ 3 เพื่อลดภาระ Disk I/O บน MariaDB ให้เหลือเฉพาะข้อมูลถาวร และทำให้ระบบตอบสนองได้เร็วระดับ Sub-millisecond
 
 ### 1. Entity Relationship Diagram (ER Diagram)
 
@@ -217,8 +217,7 @@ sequenceDiagram
 erDiagram
     USERS ||--o{ ROOMS : "creates / hosts"
     USERS ||--o{ MEDIA : "uploads / provides"
-    ROOMS ||--o{ MEDIA : "contains media history"
-    ROOMS ||--o| MEDIA : "references current_media"
+    ROOMS }o--o| MEDIA : "plays current_media"
 
     USERS {
         int id PK "Auto Increment"
@@ -251,7 +250,6 @@ erDiagram
 
     MEDIA {
         int id PK "Auto Increment"
-        int room_id "ห้องที่ใช้สื่อนี้"
         int uploader_id "ผู้ที่อัปโหลดหรือนำเข้า"
         enum source_type "youtube / local_file"
         varchar(255) title "ชื่อวิดีโอ"
@@ -309,7 +307,6 @@ erDiagram
 | ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำตัวสื่อ (Auto Increment) |
-| `room_id` | `INT` | YES | NULL | ห้องที่นำสื่อนี้มาเปิด (NULL หากเป็นคลังไฟล์) |
 | `uploader_id` | `INT` | NO | - | ผู้ใช้ที่นำเข้าหรืออัปโหลดวิดีโอนี้ |
 | `source_type` | `ENUM('youtube', 'local_file')` | NO | - | แหล่งที่มาของวิดีโอ (YouTube หรือไฟล์เซิร์ฟเวอร์) |
 | `title` | `VARCHAR(255)` | NO | - | ชื่อของคลิปวิดีโอหรือชื่อไฟล์เดิม |
@@ -328,17 +325,17 @@ erDiagram
 
 > **ข้อกำหนดสถาปัตยกรรม:** 
 > - เชื่อมต่อและประมวลผล Redis ด้วยไลบรารี `ioredis` **เฉพาะฝั่ง Backend (Hono / Node.js Runtime)** เท่านั้น เพื่อความปลอดภัยของข้อมูล
-> - ย้ายข้อมูลสถานะชั่วคราว (Transient State) ทั้งหมดออกจาก MariaDB เพื่อลดภาระการเขียนลงดิสก์ (Disk I/O Bottleneck) และทำให้การซิงค์แบบเรียลไทม์มีความเร็วสูงระดับ Sub-millisecond
+> - ออกแบบให้จัดเก็บข้อมูลสถานะเรียลไทม์และข้อมูลชั่วคราว (Transient State) ทั้งหมดบน RAM ของ Redis เพื่อลดภาระ Disk I/O บน MariaDB และให้ความเร็วในการตอบสนองระดับ Sub-millisecond
 
 #### 3.1 สรุปรูปแบบ Key และชนิดข้อมูลบน Redis (Redis Key Summary)
-| รูปแบบ Key (Key Pattern) | ชนิดข้อมูล (Data Type) | ข้อมูลที่ย้ายมาจาก DB เดิม | คำสั่งหลัก (Commands) | วัตถุประสงค์และการทำงาน | นโยบายการหมดอายุ (TTL / Expiration) |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `room:{roomId}:playback` | **Hash** | ย้ายจาก `playback_states` | `HSET`, `HGETALL`, `HMSET`, `EXPIRE` | ซิงค์สถานะการเล่นวิดีโอปัจจุบัน (เวลา, เล่น/หยุด, ความเร็ว, เสียง) ส่งให้ผู้ชมทุกคนและ Late-joiner | ลบเมื่อปิดห้อง (`status = 'ended'`) หรือตั้ง TTL 24 ชม. |
-| `room:{roomId}:participants` | **Hash** | ย้ายจาก `room_participants` | `HSET`, `HDEL`, `HGETALL`, `HVALS`, `HLEN` | บันทึกรายชื่อและสถานะของผู้ใช้ที่กำลังออนไลน์ในห้องแบบเรียลไทม์ (Field: `user:{userId}`) | ลบ Field เมื่อผู้ใช้ออกจากห้อง (`HDEL`) หรือลบ Key เมื่อปิดห้อง |
-| `room:{roomId}:messages` | **List** | ย้ายจาก `room_messages` | `RPUSH`, `LTRIM`, `LRANGE` | จัดเก็บประวัติข้อความแชทล่าสุดในห้องแบบ Capped List (จำกัด 100 ข้อความล่าสุด) | ลบเมื่อปิดห้อง หรือตั้ง TTL 24 ชม. |
-| `socket:{socketId}:session` | **Hash** | *สร้างใหม่บน Redis* | `HSET`, `HGETALL`, `DEL` | แมป Socket ID กลับไปยัง `userId` และ `roomId` สำหรับจัดการ Disconnect แบบ $O(1)$ | ลบทันทีเมื่อ Socket Disconnect |
-| `active_rooms` | **Set** | *สร้างใหม่บน Redis* | `SADD`, `SREM`, `SMEMBERS`, `SCARD` | เก็บรายชื่อ `roomId` ที่กำลังเปิดอยู่ สำหรับแสดงใน Room Lobby ได้รวดเร็ว | เพิ่มเมื่อเปิดห้อง (`SADD`) และลบเมื่อปิดห้อง (`SREM`) |
-| `ratelimit:chat:{userId}` | **String** | *สร้างใหม่บน Redis* | `SET ... EX 1 NX` | จำกัดความถี่การส่งแชทป้องกันสแปม (Rate Limit 1 ข้อความ / 1 วินาที) | TTL 1 วินาที (หมดอายุอัตโนมัติ) |
+| รูปแบบ Key (Key Pattern) | ชนิดข้อมูล (Data Type) | คำสั่งหลัก (Commands) | วัตถุประสงค์และการทำงาน | นโยบายการหมดอายุ (TTL / Expiration) |
+| :--- | :--- | :--- | :--- | :--- |
+| `room:{roomId}:playback` | **Hash** | `HSET`, `HGETALL`, `HMSET`, `EXPIRE` | ซิงค์สถานะการเล่นวิดีโอปัจจุบัน (เวลา, เล่น/หยุด, ความเร็ว, เสียง) ส่งให้ผู้ชมทุกคนและ Late-joiner | ลบเมื่อปิดห้อง (`status = 'ended'`) หรือตั้ง TTL 24 ชม. |
+| `room:{roomId}:participants` | **Hash** | `HSET`, `HDEL`, `HGETALL`, `HVALS`, `HLEN` | บันทึกรายชื่อและสถานะของผู้ใช้ที่กำลังออนไลน์ในห้องแบบเรียลไทม์ (Field: `user:{userId}`) | ลบ Field เมื่อผู้ใช้ออกจากห้อง (`HDEL`) หรือลบ Key เมื่อปิดห้อง |
+| `room:{roomId}:messages` | **List** | `RPUSH`, `LTRIM`, `LRANGE` | จัดเก็บประวัติข้อความแชทล่าสุดในห้องแบบ Capped List (จำกัด 100 ข้อความล่าสุด) | ลบเมื่อปิดห้อง หรือตั้ง TTL 24 ชม. |
+| `socket:{socketId}:session` | **Hash** | `HSET`, `HGETALL`, `DEL` | แมป Socket ID กลับไปยัง `userId` และ `roomId` สำหรับจัดการ Disconnect แบบ $O(1)$ | ลบทันทีเมื่อ Socket Disconnect |
+| `active_rooms` | **Set** | `SADD`, `SREM`, `SMEMBERS`, `SCARD` | เก็บรายชื่อ `roomId` ที่กำลังเปิดอยู่ สำหรับแสดงใน Room Lobby ได้รวดเร็ว | เพิ่มเมื่อเปิดห้อง (`SADD`) และลบเมื่อปิดห้อง (`SREM`) |
+| `ratelimit:chat:{userId}` | **String** | `SET ... EX 1 NX` | จำกัดความถี่การส่งแชทป้องกันสแปม (Rate Limit 1 ข้อความ / 1 วินาที) | TTL 1 วินาที (หมดอายุอัตโนมัติ) |
 
 #### 3.2 รายละเอียดและโครงสร้างข้อมูลเชิงลึก (In-Depth Schema Specifications)
 
@@ -347,6 +344,9 @@ erDiagram
 - **Fields & Values:**
   | Field | ชนิดข้อมูล | ตัวอย่างค่า | คำอธิบาย |
   | :--- | :--- | :--- | :--- |
+  | `mediaId` | `string` (Integer) | `"1"` | รหัสสื่อวิดีโอปัจจุบันที่กำลังเล่น (หรือ `""` หากยังไม่เปิดสื่อ) |
+  | `mediaType` | `string` | `"youtube"` | ประเภทของสื่อ (`"youtube"`, `"local_file"` หรือ `"none"`) |
+  | `sourceUrl` | `string` | `"dQw4w9WgXcQ"` | URL ของไฟล์วิดีโอ หรือ YouTube Video ID สำหรับสตรีม |
   | `currentTime` | `string` (Float) | `"124.580"` | ตำแหน่งเวลาของวิดีโอปัจจุบัน (วินาที ละเอียดถึงทศนิยม 3 ตำแหน่ง) |
   | `isPlaying` | `string` (Boolean) | `"true"` | สถานะกำลังเล่น (`true`) หรือหยุดชั่วคราว (`false`) |
   | `playbackSpeed` | `string` (Float) | `"1.25"` | ความเร็วในการเล่นวิดีโอที่ Host กำหนด |
@@ -431,3 +431,4 @@ erDiagram
 | | `video:sync` | Server -> Viewers | `{ action, currentTime, speed, timestamp }` | Broadcast คำสั่งให้เฉพาะฝั่ง Viewers ซิงค์เวลาตามทันที |
 | **Live Chat** | `chat:send` | Client -> Server | `{ roomId, message }` | ผู้ใช้ส่งข้อความแชทในห้อง |
 | | `chat:new-message` | Server -> Room | `{ id, senderName, message, createdAt }` | กระจายข้อความใหม่ให้ทุกคนในห้องเห็นทันที |
+| **System & Error** | `error` | Server -> Client | `{ message }` | ส่งข้อความแจ้งเตือนเมื่อเกิดข้อผิดพลาด (เช่น รหัสผ่านผิด, ติด Rate Limit แชท) |
