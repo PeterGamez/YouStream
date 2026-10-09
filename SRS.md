@@ -205,6 +205,31 @@ sequenceDiagram
 
 ---
 
+#### 💬 กลไกที่ 3: ระบบแชทสดในห้องสตรีม (In-Room Live Chat)
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Host / Viewer (Sender)
+    participant FE as Next.js (Client)
+    participant Socket as Socket.io Server
+    participant Redis as Redis (ioredis)
+    participant FE_All as Next.js (Room Participants)
+
+    User->>FE: พิมพ์ข้อความในกล่องแชทและกดส่ง
+    FE->>Socket: Socket Emit ('chat:send', { roomId, message })
+    Socket->>Redis: ตรวจสอบ Rate Limit (SET ratelimit:chat:{userId} 1 EX 1 NX)
+    alt ถูก Rate Limit (ส่งข้อความถี่เกินไป < 1 วินาที)
+        Socket-->>FE: Socket Emit ('chat:error', { message: 'ส่งข้อความเร็วเกินไป กรุณารอสักครู่' })
+    else ผ่านการตรวจสอบ (อนุญาตให้ส่ง)
+        Socket->>Redis: RPUSH + LTRIM (room:{roomId}:messages, Capped 100 ข้อความ)
+        Socket-->>FE_All: Broadcast ('chat:message', { id, senderId, senderName, avatarUrl, message, createdAt })
+        FE_All->>FE_All: แสดงผลข้อความใหม่ในหน้าต่างแชททันที
+    end
+    Note over Socket, FE_All: ผู้ชมที่เข้าห้องใหม่ (Late-joiner) จะได้รับประวัติแชทล่าสุดผ่าน LRANGE (100 ข้อความ)
+```
+
+---
+
 ## 🗄️ โครงสร้างฐานข้อมูลและการจัดการสถานะ (Database & In-Memory State Schema)
 
 ระบบแบ่งการจัดการข้อมูลในฝั่ง Backend ออกเป็น 2 ส่วนตามสถาปัตยกรรม High-Performance Real-Time:
