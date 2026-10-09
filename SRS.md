@@ -213,11 +213,21 @@ sequenceDiagram
 
 ### 1. Entity Relationship Diagram (ER Diagram)
 
+ไดอะแกรมแสดงแบบจำลองข้อมูลภาพรวมของระบบ (Overall Conceptual Data Model) ซึ่งผสานการทำงานระหว่าง **MariaDB (Persistent Relational Database)** สำหรับจัดเก็บข้อมูลถาวร และ **Redis (In-Memory State Store)** สำหรับจัดเก็บสถานะแบบเรียลไทม์:
+
 ```mermaid
 erDiagram
+    %% Persistent Relational Entities (MariaDB)
     USERS ||--o{ ROOMS : "creates / hosts"
     USERS ||--o{ MEDIA : "uploads / provides"
     ROOMS }o--o| MEDIA : "plays current_media"
+
+    %% Real-Time In-Memory Entities (Redis State Store)
+    USERS ||--o{ REDIS_ROOM_PARTICIPANTS : "joins (online)"
+    USERS ||--o{ REDIS_ROOM_MESSAGES : "sends"
+    ROOMS ||--|| REDIS_PLAYBACK_STATE : "syncs playback"
+    ROOMS ||--o{ REDIS_ROOM_PARTICIPANTS : "contains active viewers"
+    ROOMS ||--o{ REDIS_ROOM_MESSAGES : "stores recent chat"
 
     USERS {
         int id PK "Auto Increment"
@@ -261,6 +271,41 @@ erDiagram
         int duration_seconds "ความยาววิดีโอ (วินาที)"
         datetime created_at "เวลาที่เพิ่มสื่อ"
         datetime updated_at "เวลาที่แก้ไขข้อมูลสื่อล่าสุด"
+    }
+
+    REDIS_PLAYBACK_STATE {
+        string room_key PK "Key room:{roomId}:playback (Hash)"
+        string media_id "รหัสสื่อปัจจุบัน"
+        string media_type "youtube / local_file"
+        string source_url "URL หรือ YouTube Video ID"
+        string current_time "ตำแหน่งเวลา (วินาที เช่น 124.580)"
+        string is_playing "สถานะ true / false"
+        string playback_speed "ความเร็ว เช่น 1.00, 1.25"
+        string volume "ระดับเสียง 0.00 - 1.00"
+        string updated_by "id ของ Host ผู้สั่งควบคุม"
+        string updated_at "ISO Timestamp เพื่อซิงค์ Time Drift"
+    }
+
+    REDIS_ROOM_PARTICIPANTS {
+        string room_key PK "Key room:{roomId}:participants (Hash)"
+        string user_field PK "Field user:{userId}"
+        int user_id "รหัสผู้ใช้"
+        varchar display_name "ชื่อที่แสดง"
+        varchar avatar_url "URL รูปโปรไฟล์"
+        string role "host / viewer"
+        string socket_id "Socket Connection ID"
+        string joined_at "เวลาที่เข้าร่วมห้อง"
+    }
+
+    REDIS_ROOM_MESSAGES {
+        string room_key PK "Key room:{roomId}:messages (List Capped 100)"
+        string id "รหัสข้อความ เช่น msg_1728461234"
+        int sender_id "รหัสผู้ส่ง (null กรณี system)"
+        varchar sender_name "ชื่อผู้ส่ง"
+        varchar avatar_url "รูปโปรไฟล์ผู้ส่ง"
+        string message "ข้อความแชท"
+        string message_type "chat / system"
+        string created_at "เวลาที่ส่งข้อความ"
     }
 ```
 
