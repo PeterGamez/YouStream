@@ -22,7 +22,7 @@
 ## 👥 สมาชิกในกลุ่ม (Team Members)
 | ลำดับ | รหัสนักศึกษา | ชื่อ - นามสกุล | บทบาทหน้าที่หลัก (Role) | GitHub Username |
 | :---: | :---: | :--- | :--- | :--- |
-| 1 | 6730300108 | นายชนกันต์ เขียวภักดี | Backend Developer / Database Designer | [@petegamez](https://github.com/petegamez) |
+| 1 | 6730300108 | นายชนกันต์ เขียวภักดี | Backend Developer / Database Designer | [@PeteGamez](https://github.com/PeteGamez) |
 | 2 |  |  | Frontend Developer / UI Designer | [@Snowhazee](https://github.com/Snowhazee) |
 
 ---
