@@ -155,7 +155,7 @@ sequenceDiagram
     actor Host as Host (Creator)
     participant FE_Host as Next.js (Host)
     participant BE as Hono Server + Socket.io
-    participant Redis as Redis (ioredis)
+    participant Redis as Redis
     participant FE_Viewer as Next.js (Viewers)
     actor Viewer as Viewer
 
@@ -181,10 +181,10 @@ sequenceDiagram
     autonumber
     actor Host as Host (Creator)
     participant FE_Host as Next.js (Host)
-    participant BE as Hono Server (REST API & Storage)
+    participant BE as Hono Server
     participant Socket as Socket.io Server
     participant MariaDB as MariaDB
-    participant Redis as Redis (ioredis)
+    participant Redis as Redis
     participant FE_Viewer as Next.js (Viewers)
 
     Host->>FE_Host: เลือกไฟล์วิดีโอจากเครื่อง (.mp4, .webm <= 500MB)
@@ -212,7 +212,7 @@ sequenceDiagram
     actor User as Host / Viewer (Sender)
     participant FE as Next.js (Client)
     participant Socket as Socket.io Server
-    participant Redis as Redis (ioredis)
+    participant Redis as Redis
     participant FE_All as Next.js (Room Participants)
 
     User->>FE: พิมพ์ข้อความในกล่องแชทและกดส่ง
