@@ -155,19 +155,20 @@ sequenceDiagram
     actor Host as Host (Creator)
     participant FE_Host as Next.js (Host)
     participant BE as Hono Server + Socket.io
+    participant Redis as Redis (ioredis)
     participant FE_Viewer as Next.js (Viewers)
     actor Viewer as Viewer
 
     Host->>FE_Host: วางลิงก์ YouTube
     FE_Host->>FE_Host: สกัด Video ID จาก URL
     FE_Host->>BE: Socket Emit ('media:change', { type: 'youtube', videoId })
-    BE->>BE: อัปเดตข้อมูล Current Media & Playback State ในฐานข้อมูล
+    BE->>Redis: แคช Current Media & Playback State บน Redis
     BE-->>FE_Host: Broadcast ('media:update', data)
     BE-->>FE_Viewer: Broadcast ('media:update', data)
     Note over FE_Host, FE_Viewer: เครื่องเล่น YouTube IFrame API โหลด Video ID เดียวกัน
     Host->>FE_Host: สั่ง Play / Pause / Seek
     FE_Host->>BE: Socket Emit ('video:control', { action, currentTime, speed })
-    BE->>BE: อัปเดต Playback State
+    BE->>Redis: อัปเดต Playback State ลง Redis (room:{roomId}:playback)
     BE-->>FE_Viewer: Broadcast ('video:sync', { action, currentTime, speed })
     FE_Viewer->>FE_Viewer: YouTube Player ซิงค์เวลาและเล่นตาม Host ทันที
 ```
@@ -182,29 +183,33 @@ sequenceDiagram
     participant FE_Host as Next.js (Host)
     participant BE as Hono Server (REST API & Storage)
     participant Socket as Socket.io Server
+    participant MariaDB as MariaDB
+    participant Redis as Redis (ioredis)
     participant FE_Viewer as Next.js (Viewers)
 
     Host->>FE_Host: เลือกไฟล์วิดีโอจากเครื่อง (.mp4, .webm <= 500MB)
     FE_Host->>BE: HTTP POST /api/upload (Multipart Form Data)
     Note over BE: ตรวจสอบ MIME type, ตรวจสอบขนาด <= 500MB, บันทึกลง Storage
+    BE->>MariaDB: บันทึกข้อมูลมีเดียลงตาราง media
     BE-->>FE_Host: HTTP Response 201 Created { fileUrl, mediaId, title }
     FE_Host->>Socket: Socket Emit ('media:change', { type: 'local_file', url: fileUrl })
-    Socket->>Socket: บันทึก Current Media & Playback State ลง DB
+    Socket->>Redis: บันทึก Current Media & Playback State ลง Redis
     Socket-->>FE_Viewer: Broadcast ('media:update', { type: 'local_file', url: fileUrl })
     Note over FE_Host, FE_Viewer: แท็ก <video> ของทุกคนโหลดไฟล์สตรีมจาก fileUrl
     Host->>FE_Host: สั่ง Play / Pause / Seek / Speed
     FE_Host->>Socket: Socket Emit ('video:control', { action, currentTime, speed })
+    Socket->>Redis: อัปเดต Playback State ลง Redis (room:{roomId}:playback)
     Socket-->>FE_Viewer: Broadcast ('video:sync', { action, currentTime, speed })
     FE_Viewer->>FE_Viewer: แท็ก <video> ฝั่งผู้ชมซิงค์คำสั่งแบบเรียลไทม์
 ```
 
 ---
 
-## 🗄️ โครงสร้างฐานข้อมูล (Database Schema & ER Diagram)
+## 🗄️ โครงสร้างฐานข้อมูลและการจัดการสถานะ (Database & In-Memory State Schema)
 
-ระบบแบ่งการจัดการข้อมูลในฝั่ง Backend ออกเป็น 2 ส่วน:
-1. **MariaDB / MySQL (Persistent Database):** สำหรับจัดเก็บข้อมูลเชิงสัมพันธ์หลักของระบบอย่างถาวร (Users, Rooms, Media, Playback States, Participants, Messages) ตาม ER Diagram และ Data Dictionary ด้านล่าง
-2. **Redis (In-Memory Cache & State Store - ใช้เฉพาะฝั่ง Backend):** สำหรับแคชสถานะการเล่นวิดีโอล่าสุด (`room:{id}:playback`), ข้อมูลห้องที่กำลังออนไลน์ (`active_rooms`), และนับจำนวนผู้ชมแบบเรียลไทม์ เพื่อให้การตอบสนองรวดเร็วและลดภาระ I/O บนฐานข้อมูลหลัก
+ระบบแบ่งการจัดการข้อมูลในฝั่ง Backend ออกเป็น 2 ส่วนตามสถาปัตยกรรม High-Performance Real-Time:
+1. **MariaDB / MySQL (Persistent Database):** สำหรับจัดเก็บข้อมูลเชิงสัมพันธ์หลักของระบบอย่างถาวร (Users, Rooms, Media) ตาม ER Diagram และ Data Dictionary ในหัวข้อที่ 1 และ 2
+2. **Redis (In-Memory Data Store & Cache - ใช้เฉพาะฝั่ง Backend ผ่าน `ioredis`):** สำหรับจัดเก็บและจัดการข้อมูลที่มีความถี่ในการอ่าน/เขียนสูงและข้อมูลชั่วคราว (Transient State) ทั้งหมด ได้แก่ สถานะการเล่นวิดีโอเรียลไทม์ (`playback_states`), รายชื่อผู้ใช้ออนไลน์ (`room_participants`), ประวัติข้อความแชทในห้อง (`room_messages`), รายชื่อห้องที่กำลังเปิด (`active_rooms`), และระบบป้องกันสแปม (`ratelimit:chat`) ตามรายละเอียดในหัวข้อที่ 3 เพื่อลดภาระ Disk I/O บน MariaDB ให้เหลือเฉพาะข้อมูลถาวร และทำให้ระบบตอบสนองได้เร็วระดับ Sub-millisecond
 
 ### 1. Entity Relationship Diagram (ER Diagram)
 
@@ -212,12 +217,6 @@ sequenceDiagram
 erDiagram
     USERS ||--o{ ROOMS : "creates / hosts"
     USERS ||--o{ MEDIA : "uploads / provides"
-    USERS ||--o{ ROOM_PARTICIPANTS : "joins"
-    USERS ||--o{ ROOM_MESSAGES : "sends"
-
-    ROOMS ||--|| PLAYBACK_STATES : "has current"
-    ROOMS ||--o{ ROOM_PARTICIPANTS : "contains"
-    ROOMS ||--o{ ROOM_MESSAGES : "stores"
     ROOMS ||--o{ MEDIA : "contains media history"
     ROOMS ||--o| MEDIA : "references current_media"
 
@@ -264,41 +263,6 @@ erDiagram
         int duration_seconds "ความยาววิดีโอ (วินาที)"
         datetime created_at "เวลาที่เพิ่มสื่อ"
         datetime updated_at "เวลาที่แก้ไขข้อมูลสื่อล่าสุด"
-    }
-
-    PLAYBACK_STATES {
-        int room_id PK "รหัสห้อง (1 ต่อ 1)"
-        decimal current_time "ตำแหน่งเวลาของวิดีโอ (วินาที)"
-        boolean is_playing "สถานะกำลังเล่นอยู่หรือไม่"
-        decimal playback_speed "ความเร็วในการเล่น เช่น 1.0, 1.25, 2.0"
-        decimal volume "ระดับเสียงฝั่ง Host (0.00 - 1.00)"
-        int updated_by "ผู้ใช้ที่สั่งอัปเดตล่าสุด"
-        datetime created_at "เวลาที่เริ่มต้นสถานะห้อง"
-        datetime updated_at "เวลาที่ซิงค์หรืออัปเดตสถานะล่าสุด"
-    }
-
-    ROOM_PARTICIPANTS {
-        int id PK "Auto Increment"
-        int room_id "รหัสห้อง"
-        int user_id "รหัสผู้ใช้"
-        varchar(100) socket_id "Socket Connection ID"
-        enum role "host / viewer"
-        boolean is_connected "สถานะการเชื่อมต่อออนไลน์"
-        datetime joined_at "เวลาที่เข้าร่วมห้อง"
-        datetime left_at "เวลาที่ออกจากห้อง"
-        datetime created_at "เวลาที่สร้างรายการ"
-        datetime updated_at "เวลาที่แก้ไขสถานะล่าสุด"
-    }
-
-    ROOM_MESSAGES {
-        int id PK "Auto Increment"
-        int room_id "รหัสห้อง"
-        int sender_id "ผู้ส่ง (NULL กรณี System message)"
-        varchar(100) sender_name "ชื่อผู้ส่งที่แสดง"
-        text message "เนื้อหาข้อความ"
-        enum message_type "chat / system"
-        datetime created_at "เวลาที่ส่งข้อความ"
-        datetime updated_at "เวลาที่แก้ไขข้อความล่าสุด"
     }
 ```
 
@@ -360,49 +324,93 @@ erDiagram
 
 ---
 
-#### 2.4 ตาราง `playback_states` (ตารางสถานะการเล่นวิดีโอแบบเรียลไทม์ของแต่ละห้อง)
-> *เหตุผลในการแยกตาราง:* เพื่อให้การบันทึกสถานะการเล่น (Play, Pause, Seek Time, Speed) มีความรวดเร็ว ใช้เนื้อที่น้อย และเมื่อมีผู้ชมใหม่เข้ามา (Late Joiner) สามารถคิวรีแถวนี้แถวเดียวเพื่อซิงค์เวลาได้ทันที
+### 3. โครงสร้างข้อมูล In-Memory บน Redis (Redis Data Structures Schema)
 
-| ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
-| :--- | :--- | :---: | :--- | :--- |
-| `room_id` | `INT` | NO | PRIMARY KEY | รหัสห้องสตรีม (1 ห้องมี 1 Record สถานะ) |
-| `current_time` | `DECIMAL(10, 3)` | NO | DEFAULT `0.000` | ตำแหน่งเวลาปัจจุบันของวิดีโอ (วินาที ละเอียดถึงเสี้ยววินาที) |
-| `is_playing` | `BOOLEAN` | NO | DEFAULT `FALSE` | กำลังเล่นอยู่ (`TRUE`) หรือ หยุดชั่วคราว (`FALSE`) |
-| `playback_speed` | `DECIMAL(3, 2)` | NO | DEFAULT `1.00` | ความเร็วการเล่นที่ Host ตั้งไว้ (เช่น 0.75, 1.00, 1.50) |
-| `volume` | `DECIMAL(3, 2)` | NO | DEFAULT `1.00` | ระดับเสียงหลักของ Host (0.00 ถึง 1.00) |
-| `updated_by` | `INT` | NO | - | ผู้สั่งเปลี่ยนสถานะ (ตรวจสอบสิทธิ์ต้องเป็น Host) |
-| `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่เริ่มต้นสถานะห้อง |
-| `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่ซิงค์หรืออัปเดตสถานะล่าสุด ใช้คำนวณ Time Drift |
+> **ข้อกำหนดสถาปัตยกรรม:** 
+> - เชื่อมต่อและประมวลผล Redis ด้วยไลบรารี `ioredis` **เฉพาะฝั่ง Backend (Hono / Node.js Runtime)** เท่านั้น เพื่อความปลอดภัยของข้อมูล
+> - ย้ายข้อมูลสถานะชั่วคราว (Transient State) ทั้งหมดออกจาก MariaDB เพื่อลดภาระการเขียนลงดิสก์ (Disk I/O Bottleneck) และทำให้การซิงค์แบบเรียลไทม์มีความเร็วสูงระดับ Sub-millisecond
 
----
+#### 3.1 สรุปรูปแบบ Key และชนิดข้อมูลบน Redis (Redis Key Summary)
+| รูปแบบ Key (Key Pattern) | ชนิดข้อมูล (Data Type) | ข้อมูลที่ย้ายมาจาก DB เดิม | คำสั่งหลัก (Commands) | วัตถุประสงค์และการทำงาน | นโยบายการหมดอายุ (TTL / Expiration) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `room:{roomId}:playback` | **Hash** | ย้ายจาก `playback_states` | `HSET`, `HGETALL`, `HMSET`, `EXPIRE` | ซิงค์สถานะการเล่นวิดีโอปัจจุบัน (เวลา, เล่น/หยุด, ความเร็ว, เสียง) ส่งให้ผู้ชมทุกคนและ Late-joiner | ลบเมื่อปิดห้อง (`status = 'ended'`) หรือตั้ง TTL 24 ชม. |
+| `room:{roomId}:participants` | **Hash** | ย้ายจาก `room_participants` | `HSET`, `HDEL`, `HGETALL`, `HVALS`, `HLEN` | บันทึกรายชื่อและสถานะของผู้ใช้ที่กำลังออนไลน์ในห้องแบบเรียลไทม์ (Field: `user:{userId}`) | ลบ Field เมื่อผู้ใช้ออกจากห้อง (`HDEL`) หรือลบ Key เมื่อปิดห้อง |
+| `room:{roomId}:messages` | **List** | ย้ายจาก `room_messages` | `RPUSH`, `LTRIM`, `LRANGE` | จัดเก็บประวัติข้อความแชทล่าสุดในห้องแบบ Capped List (จำกัด 100 ข้อความล่าสุด) | ลบเมื่อปิดห้อง หรือตั้ง TTL 24 ชม. |
+| `socket:{socketId}:session` | **Hash** | *สร้างใหม่บน Redis* | `HSET`, `HGETALL`, `DEL` | แมป Socket ID กลับไปยัง `userId` และ `roomId` สำหรับจัดการ Disconnect แบบ $O(1)$ | ลบทันทีเมื่อ Socket Disconnect |
+| `active_rooms` | **Set** | *สร้างใหม่บน Redis* | `SADD`, `SREM`, `SMEMBERS`, `SCARD` | เก็บรายชื่อ `roomId` ที่กำลังเปิดอยู่ สำหรับแสดงใน Room Lobby ได้รวดเร็ว | เพิ่มเมื่อเปิดห้อง (`SADD`) และลบเมื่อปิดห้อง (`SREM`) |
+| `ratelimit:chat:{userId}` | **String** | *สร้างใหม่บน Redis* | `SET ... EX 1 NX` | จำกัดความถี่การส่งแชทป้องกันสแปม (Rate Limit 1 ข้อความ / 1 วินาที) | TTL 1 วินาที (หมดอายุอัตโนมัติ) |
 
-#### 2.5 ตาราง `room_participants` (ตารางผู้เข้าร่วมห้องและสถานะการเชื่อมต่อ)
-| ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำรายการ (Auto Increment) |
-| `room_id` | `INT` | NO | - | ห้องที่เข้าร่วม |
-| `user_id` | `INT` | NO | - | ผู้ใช้ที่เป็นสมาชิกที่เข้าร่วมห้อง |
-| `socket_id` | `VARCHAR(100)` | YES | NULL | รหัส Socket ID สำหรับติดต่อเฉพาะ Client |
-| `role` | `ENUM('host', 'viewer')` | NO | DEFAULT `'viewer'` | บทบาทในห้อง (Host ผู้ควบคุม หรือ Viewer ผู้ชม) |
-| `is_connected` | `BOOLEAN` | NO | DEFAULT `TRUE` | สถานะการเชื่อมต่อออนไลน์ในห้อง |
-| `joined_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่เข้าห้อง |
-| `left_at` | `DATETIME` | YES | NULL | วันเวลาที่ออกจากห้อง |
-| `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่สร้างรายการ |
-| `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่อัปเดตสถานะล่าสุด |
+#### 3.2 รายละเอียดและโครงสร้างข้อมูลเชิงลึก (In-Depth Schema Specifications)
 
----
+##### 3.2.1 สถานะการเล่นวิดีโอแบบเรียลไทม์ (`room:{roomId}:playback` - Hash)
+- **Key ตัวอย่าง:** `room:101:playback`
+- **Fields & Values:**
+  | Field | ชนิดข้อมูล | ตัวอย่างค่า | คำอธิบาย |
+  | :--- | :--- | :--- | :--- |
+  | `currentTime` | `string` (Float) | `"124.580"` | ตำแหน่งเวลาของวิดีโอปัจจุบัน (วินาที ละเอียดถึงทศนิยม 3 ตำแหน่ง) |
+  | `isPlaying` | `string` (Boolean) | `"true"` | สถานะกำลังเล่น (`true`) หรือหยุดชั่วคราว (`false`) |
+  | `playbackSpeed` | `string` (Float) | `"1.25"` | ความเร็วในการเล่นวิดีโอที่ Host กำหนด |
+  | `volume` | `string` (Float) | `"1.00"` | ระดับเสียงหลักของ Host (0.00 - 1.00) |
+  | `updatedBy` | `string` (Integer) | `"5"` | `id` ของ Host ผู้สั่งควบคุมล่าสุด |
+  | `updatedAt` | `string` (ISO 8601) | `"2026-10-09T15:20:00.123Z"` | เวลาที่ส่งคำสั่ง เพื่อนำไปคำนวณ Time Drift ชดเชยความหน่วงฝั่งผู้ชม |
+- **คำสั่งและกลไกการทำงาน:** บันทึกสถานะด้วยคำสั่ง `HSET` หรือ `HMSET room:{roomId}:playback` และดึงข้อมูลสถานะล่าสุดส่งให้ Late-joiner ด้วยคำสั่ง `HGETALL room:{roomId}:playback`
 
-#### 2.6 ตาราง `room_messages` (ตารางข้อความแชทในห้อง)
-| ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
-| :--- | :--- | :---: | :--- | :--- |
-| `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำข้อความ (Auto Increment) |
-| `room_id` | `INT` | NO | - | ห้องที่ส่งข้อความนี้ |
-| `sender_id` | `INT` | YES | NULL | ผู้ใช้ที่ส่งข้อความ (NULL หากเป็นข้อความจากระบบ / System) |
-| `sender_name` | `VARCHAR(100)` | NO | - | ชื่อผู้ส่งที่แสดงในกล่องแชท |
-| `message` | `TEXT` | NO | - | ข้อความแชท |
-| `message_type` | `ENUM('chat', 'system')` | NO | DEFAULT `'chat'` | ประเภทข้อความ (แชททั่วไป หรือ ข้อความแจ้งเตือนจากระบบ) |
-| `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | เวลาที่ส่งข้อความ |
-| `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่มีการแก้ไขข้อความล่าสุด |
+##### 3.2.2 รายชื่อผู้เข้าร่วมและสถานะออนไลน์ (`room:{roomId}:participants` - Hash)
+- **Key ตัวอย่าง:** `room:101:participants`
+- **Field:** `user:{userId}` (เช่น `user:5`, `user:12`)
+- **Value (JSON Schema):**
+  ```json
+  {
+    "userId": 5,
+    "displayName": "SomsakDev",
+    "avatarUrl": "https://lh3.googleusercontent.com/a/...",
+    "role": "host",
+    "socketId": "sock_xY99aK10",
+    "joinedAt": "2026-10-09T15:10:00.000Z"
+  }
+  ```
+- **กลไกการทำงาน (Operations):**
+  - **บันทึกผู้ใช้เข้าห้อง:** บันทึกข้อมูลด้วยคำสั่ง `HSET room:{roomId}:participants user:{userId} <JSON>`
+  - **ลบผู้ใช้ออกจากห้อง:** ลบข้อมูลด้วยคำสั่ง `HDEL room:{roomId}:participants user:{userId}`
+  - **นับจำนวนผู้ชมในห้อง:** ตรวจสอบได้ทันทีด้วยคำสั่ง `HLEN room:{roomId}:participants` (ความเร็ว $O(1)$)
+  - **ดึงรายชื่อผู้ชมทั้งหมด:** ดึงรายการทั้งหมดด้วยคำสั่ง `HVALS room:{roomId}:participants`
+
+##### 3.2.3 ประวัติข้อความแชทในห้อง (`room:{roomId}:messages` - Capped List)
+- **Key ตัวอย่าง:** `room:101:messages`
+- **Value (JSON Schema ใน List):**
+  ```json
+  {
+    "id": "msg_1728461234567",
+    "senderId": 5,
+    "senderName": "SomsakDev",
+    "avatarUrl": "https://lh3.googleusercontent.com/a/...",
+    "message": "คลิปนี้สนุกมากเลยครับ!",
+    "messageType": "chat",
+    "createdAt": "2026-10-09T15:12:45.000Z"
+  }
+  ```
+- **กลไกการทำงาน (Operations):**
+  - **ส่งข้อความใหม่และจำกัด 100 ข้อความ:** บันทึกข้อความด้วยคำสั่ง `RPUSH room:{roomId}:messages <JSON>` และตัดประวัติไม่ให้เกิน 100 ข้อความด้วยคำสั่ง `LTRIM room:{roomId}:messages -100 -1`
+  - **ดึงประวัติแชทให้ Late-joiner:** ดึงข้อความทั้งหมดด้วยคำสั่ง `LRANGE room:{roomId}:messages 0 -1`
+
+##### 3.2.4 ตรวจสอบ Session เมื่อ Socket หลุดการเชื่อมต่อ (`socket:{socketId}:session` - Hash)
+- **Key ตัวอย่าง:** `socket:sock_xY99aK10:session`
+- **Fields:**
+  - `userId`: `"5"`
+  - `roomId`: `"101"`
+- **กลไกการทำงาน (Operations):** เมื่อ Socket หลุดการเชื่อมต่อ (Disconnect) ดึงข้อมูลด้วยคำสั่ง `HGETALL socket:{socketId}:session` เพื่อทราบ `roomId` และ `userId` จากนั้นลบผู้ใช้ออกจากห้องด้วยคำสั่ง `HDEL` และลบคีย์ด้วยคำสั่ง `DEL` แบบ $O(1)$ โดยไม่ต้องวนลูปค้นหา
+
+##### 3.2.5 รายการห้องที่เปิดใช้งาน (`active_rooms` - Set)
+- **Key:** `active_rooms`
+- **Members:** `roomId` (เช่น `"101"`, `"102"`, `"205"`)
+- **กลไกการทำงาน (Operations):**
+  - **เปิดห้อง:** บันทึกรหัสห้องเข้าเซตด้วยคำสั่ง `SADD active_rooms {roomId}`
+  - **ปิดห้อง:** ลบรหัสห้องออกจากเซตด้วยคำสั่ง `SREM active_rooms {roomId}`
+  - **ดึงรายการห้องออนไลน์ทั้งหมด:** ดึงรายการทั้งหมดด้วยคำสั่ง `SMEMBERS active_rooms`
+
+##### 3.2.6 ป้องกันการส่งแชทรัว / สแปม (`ratelimit:chat:{userId}` - String with TTL)
+- **Key ตัวอย่าง:** `ratelimit:chat:5`
+- **กลไกการทำงาน (Operations):** ตรวจสอบและล็อกการส่งข้อความด้วยคำสั่ง `SET ratelimit:chat:{userId} "1" EX 1 NX` หากคืนค่า `null` แสดงว่ายังไม่พ้นช่วงจำกัดเวลา (1 วินาที) ให้ปฏิเสธข้อความและแจ้งเตือนผู้ใช้ทันที
 
 ---
 
@@ -411,9 +419,9 @@ erDiagram
 เพื่อให้การทำงานระหว่าง Frontend Next.js และ Backend Hono ระบบกำหนด Event หลักดังนี้:
 
 | หมวดหมู่ (Category) | ชื่อ Event (Event Name) | ทิศทาง (Direction) | ข้อมูลที่ส่ง (Payload) | คำอธิบาย (Description) |
-| :--- | :--- | :---: | :--- | :--- |
+| :--- | :--- | :--- | :--- | :--- |
 | **Room Connection** | `room:join` | Client -> Server | `{ roomId, passcode? }` | ผู้ใช้ขอเข้าร่วมห้องสตรีม |
-| | `room:joined` | Server -> Client | `{ roomInfo, playbackState, participants }` | ส่งข้อมูลห้องและสถานะวิดีโอปัจจุบันให้ Late-joiner |
+| | `room:joined` | Server -> Client | `{ roomInfo, playbackState, participants, recentMessages }` | ส่งข้อมูลห้อง, สถานะวิดีโอจาก Redis, รายชื่อผู้ใช้ และประวัติแชทล่าสุดให้ Late-joiner |
 | | `room:leave` | Client -> Server | `{ roomId }` | ผู้ใช้ออกจากห้อง |
 | | `room:user-joined` | Server -> Room | `{ userId, displayName, role }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนเข้ามาใหม่ |
 | | `room:user-left` | Server -> Room | `{ userId, displayName }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนออกไป |
