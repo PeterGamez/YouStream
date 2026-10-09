@@ -51,16 +51,17 @@
 - **Backend / API:** 
   - Server Framework: [Hono](https://hono.dev/) บน Node.js / Bun Runtime
   - Real-time Server: `socket.io` (จัดกลุ่มการกระจายข้อมูลผ่าน Socket Rooms)
+  - In-Memory Cache & State Store: [Redis](https://redis.io/) ผ่านไดรเวอร์ `ioredis` (ใช้เฉพาะฝั่ง Backend สำหรับแคช Playback State แบบเรียลไทม์, แคชรายการ Active Rooms, และ Rate Limiting)
   - File Handling: Multi-part Form Data Parser (รองรับการอัปโหลดไฟล์วิดีโอขนาดไม่เกิน 500MB)
-- **Database:** 
-  - Relational Database Management System: [MariaDB](https://mariadb.org/) / MySQL
-  - Driver: `mysql2`
+- **Database & Storage:** 
+  - Relational Database Management System (RDBMS): [MariaDB](https://mariadb.org/) / MySQL (ไดรเวอร์ `mysql2` สำหรับจัดเก็บข้อมูลถาวร)
+  - In-Memory Data Store (Backend Only): [Redis](https://redis.io/) (ไดรเวอร์ `ioredis` สำหรับ Fast In-Memory Cache)
 - **Authentication & Security:** 
   - JSON Web Tokens (JWT) สำหรับการยืนยันตัวตนแบบ Stateless
   - Password Hashing: `bcrypt`
   - OAuth 2.0 (Google Login)
 - **Hosting & Deployment:** 
-  - Backend & Database: OVHcloud / Railway
+  - Backend, Redis & Database: OVHcloud / Railway
   - Frontend: Vercel / Railway
 - **CI/CD & Version Control:** 
   - Git, GitHub Actions
@@ -102,6 +103,7 @@
 - **Performance & Latency:**
   - ค่าความหน่วงในการซิงค์สถานะวิดีโอ (Sync Latency) ผ่าน WebSocket/Socket.io ต้องน้อยกว่า 200 มิลลิวินาที ภายใต้สภาวะเครือข่ายอินเทอร์เน็ตปกติ
   - RESTful API ทั่วไปของ Hono ต้องมี Response Time เฉลี่ยไม่เกิน 300 มิลลิวินาที
+  - ใช้ **Redis** ในฝั่ง Backend เพื่อแคชสถานะการเล่นวิดีโอล่าสุด (`Playback State`) และข้อมูลห้องออนไลน์แบบ In-Memory ช่วยให้ Late-joiner ซิงค์ได้รวดเร็วระดับมิลลิวินาที และลดภาระ I/O การอ่าน/เขียนซ้ำ ๆ บน MariaDB
   - ระบบรองรับการอัปโหลดไฟล์วิดีโอขนาดใหญ่ (สูงสุด 500MB) ได้อย่างราบรื่นโดยไม่บล็อก Event Loop ของเซิร์ฟเวอร์
 - **Security & Authorization:**
   - รหัสผ่านของผู้ใช้ต้องถูกเข้ารหัสด้วย `bcrypt` (Salt Rounds >= 10)
@@ -114,6 +116,7 @@
 - **Reliability & Scalability:**
   - ระบบมีกลไก Auto-Reconnection ของ Socket.io เพื่อเชื่อมต่อใหม่และดึงสถานะล่าสุดกลับมาเมื่ออินเทอร์เน็ตขัดข้องชั่วคราว
   - ระบบห้องแบ่งการสื่อสารด้วย Socket Room Channels เพื่อจำกัดปริมาณข้อมูลการ Broadcast ให้เฉพาะผู้ใช้ในห้องนั้นๆ
+  - Backend รองรับการเชื่อมต่อกับ Redis เพื่อใช้เป็น Caching Layer และพร้อมต่อยอดเป็น Socket.io Redis Adapter สำหรับรองรับการขยายตัวในอนาคต
 
 ---
 
@@ -199,7 +202,9 @@ sequenceDiagram
 
 ## 🗄️ โครงสร้างฐานข้อมูล (Database Schema & ER Diagram)
 
-ระบบใช้ฐานข้อมูลแบบเชิงสัมพันธ์ (Relational Database) โดยใช้ **MariaDB / MySQL** ร่วมกับไดรเวอร์ `mysql2` ในฝั่ง Backend (Hono)
+ระบบแบ่งการจัดการข้อมูลในฝั่ง Backend ออกเป็น 2 ส่วน:
+1. **MariaDB / MySQL (Persistent Database):** สำหรับจัดเก็บข้อมูลเชิงสัมพันธ์หลักของระบบอย่างถาวร (Users, Rooms, Media, Playback States, Participants, Messages) ตาม ER Diagram และ Data Dictionary ด้านล่าง
+2. **Redis (In-Memory Cache & State Store - ใช้เฉพาะฝั่ง Backend):** สำหรับแคชสถานะการเล่นวิดีโอล่าสุด (`room:{id}:playback`), ข้อมูลห้องที่กำลังออนไลน์ (`active_rooms`), และนับจำนวนผู้ชมแบบเรียลไทม์ เพื่อให้การตอบสนองรวดเร็วและลดภาระ I/O บนฐานข้อมูลหลัก
 
 ### 1. Entity Relationship Diagram (ER Diagram)
 
@@ -217,38 +222,38 @@ erDiagram
     ROOMS ||--o| MEDIA : "references current_media"
 
     USERS {
-        varchar(36) id PK "UUID"
+        int id PK "Auto Increment"
         varchar(50) username UK "ชื่อผู้ใช้"
         varchar(255) email UK "อีเมล"
         varchar(255) password_hash "รหัสผ่านที่เข้ารหัสด้วย bcrypt"
         varchar(100) display_name "ชื่อที่แสดง"
         varchar(500) avatar_url "รูปภาพโปรไฟล์ (ดึงจาก Google Account หรือ Gravatar)"
         enum role "user / admin"
-        timestamp created_at "เวลาที่สร้างบัญชี"
-        timestamp updated_at "เวลาที่แก้ไขล่าสุด"
+        datetime created_at "เวลาที่สร้างบัญชี"
+        datetime updated_at "เวลาที่แก้ไขล่าสุด"
     }
 
     ROOMS {
-        varchar(36) id PK "UUID"
+        int id PK "Auto Increment"
         char(8) room_code UK "รหัสห้องตัวเลข 8 หลัก (Unique 8-digit Code)"
         varchar(150) title "ชื่อห้องสตรีม"
         text description "คำอธิบายห้อง"
-        varchar(36) host_id "ผู้สร้างห้อง"
+        int host_id "ผู้สร้างห้อง"
         enum status "active / ended"
         enum media_type "none / youtube / local_file"
-        varchar(36) current_media_id "มีเดียที่กำลังเล่นอยู่"
+        int current_media_id "มีเดียที่กำลังเล่นอยู่"
         boolean is_private "สถานะห้องส่วนตัว"
         varchar(255) passcode_hash "รหัสผ่านห้อง (ถ้ามี)"
         int max_participants "จำนวนผู้ชมสูงสุด"
-        timestamp created_at "เวลาที่สร้างห้อง"
-        timestamp updated_at "เวลาที่อัปเดตห้อง"
-        timestamp ended_at "เวลาที่ปิดห้อง"
+        datetime created_at "เวลาที่สร้างห้อง"
+        datetime updated_at "เวลาที่อัปเดตห้อง"
+        datetime ended_at "เวลาที่ปิดห้อง"
     }
 
     MEDIA {
-        varchar(36) id PK "UUID"
-        varchar(36) room_id "ห้องที่ใช้สื่อนี้"
-        varchar(36) uploader_id "ผู้ที่อัปโหลดหรือนำเข้า"
+        int id PK "Auto Increment"
+        int room_id "ห้องที่ใช้สื่อนี้"
+        int uploader_id "ผู้ที่อัปโหลดหรือนำเข้า"
         enum source_type "youtube / local_file"
         varchar(255) title "ชื่อวิดีโอ"
         varchar(1000) source_url "URL สำหรับเล่นวิดีโอ"
@@ -257,43 +262,43 @@ erDiagram
         bigint file_size_bytes "ขนาดไฟล์ (ไม่เกิน 500MB)"
         varchar(50) mime_type "video/mp4, video/webm"
         int duration_seconds "ความยาววิดีโอ (วินาที)"
-        timestamp created_at "เวลาที่เพิ่มสื่อ"
-        timestamp updated_at "เวลาที่แก้ไขข้อมูลสื่อล่าสุด"
+        datetime created_at "เวลาที่เพิ่มสื่อ"
+        datetime updated_at "เวลาที่แก้ไขข้อมูลสื่อล่าสุด"
     }
 
     PLAYBACK_STATES {
-        varchar(36) room_id PK "รหัสห้อง (1 ต่อ 1)"
+        int room_id PK "รหัสห้อง (1 ต่อ 1)"
         decimal current_time "ตำแหน่งเวลาของวิดีโอ (วินาที)"
         boolean is_playing "สถานะกำลังเล่นอยู่หรือไม่"
         decimal playback_speed "ความเร็วในการเล่น เช่น 1.0, 1.25, 2.0"
         decimal volume "ระดับเสียงฝั่ง Host (0.00 - 1.00)"
-        varchar(36) updated_by "ผู้ใช้ที่สั่งอัปเดตล่าสุด"
-        timestamp created_at "เวลาที่เริ่มต้นสถานะห้อง"
-        timestamp updated_at "เวลาที่ซิงค์หรืออัปเดตสถานะล่าสุด"
+        int updated_by "ผู้ใช้ที่สั่งอัปเดตล่าสุด"
+        datetime created_at "เวลาที่เริ่มต้นสถานะห้อง"
+        datetime updated_at "เวลาที่ซิงค์หรืออัปเดตสถานะล่าสุด"
     }
 
     ROOM_PARTICIPANTS {
-        varchar(36) id PK "UUID"
-        varchar(36) room_id "รหัสห้อง"
-        varchar(36) user_id "รหัสผู้ใช้"
+        int id PK "Auto Increment"
+        int room_id "รหัสห้อง"
+        int user_id "รหัสผู้ใช้"
         varchar(100) socket_id "Socket Connection ID"
         enum role "host / viewer"
         boolean is_connected "สถานะการเชื่อมต่อออนไลน์"
-        timestamp joined_at "เวลาที่เข้าร่วมห้อง"
-        timestamp left_at "เวลาที่ออกจากห้อง"
-        timestamp created_at "เวลาที่สร้างรายการ"
-        timestamp updated_at "เวลาที่แก้ไขสถานะล่าสุด"
+        datetime joined_at "เวลาที่เข้าร่วมห้อง"
+        datetime left_at "เวลาที่ออกจากห้อง"
+        datetime created_at "เวลาที่สร้างรายการ"
+        datetime updated_at "เวลาที่แก้ไขสถานะล่าสุด"
     }
 
     ROOM_MESSAGES {
-        varchar(36) id PK "UUID"
-        varchar(36) room_id "รหัสห้อง"
-        varchar(36) sender_id "ผู้ส่ง (NULL กรณี System message)"
+        int id PK "Auto Increment"
+        int room_id "รหัสห้อง"
+        int sender_id "ผู้ส่ง (NULL กรณี System message)"
         varchar(100) sender_name "ชื่อผู้ส่งที่แสดง"
         text message "เนื้อหาข้อความ"
         enum message_type "chat / system"
-        timestamp created_at "เวลาที่ส่งข้อความ"
-        timestamp updated_at "เวลาที่แก้ไขข้อความล่าสุด"
+        datetime created_at "เวลาที่ส่งข้อความ"
+        datetime updated_at "เวลาที่แก้ไขข้อความล่าสุด"
     }
 ```
 
@@ -304,44 +309,44 @@ erDiagram
 #### 2.1 ตาราง `users` (ตารางข้อมูลผู้ใช้งาน)
 | ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
 | :--- | :--- | :---: | :--- | :--- |
-| `id` | `VARCHAR(36)` | NO | PRIMARY KEY | รหัสประจำตัวผู้ใช้ในรูปแบบ UUID |
+| `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำตัวผู้ใช้ (Auto Increment) |
 | `username` | `VARCHAR(50)` | NO | UNIQUE | ชื่อบัญชีผู้ใช้สำหรับล็อกอินและอ้างอิง |
 | `email` | `VARCHAR(255)` | NO | UNIQUE | อีเมลสำหรับล็อกอินและการติดต่อ |
 | `password_hash` | `VARCHAR(255)` | YES | NULL (อนุญาต NULL สำหรับ Google OAuth) | รหัสผ่านที่ผ่านการเข้ารหัสด้วย bcrypt |
 | `display_name` | `VARCHAR(100)` | NO | - | ชื่อที่ต้องการให้แสดงในห้องและแชท |
 | `avatar_url` | `VARCHAR(500)` | YES | NULL | URL รูปภาพโปรไฟล์ ดึงจาก Google Account (กรณี Google OAuth) หรือดึงจาก [Gravatar](https://gravatar.com/) ผ่าน Email Hash |
 | `role` | `ENUM('user', 'admin')` | NO | DEFAULT `'user'` | สิทธิ์ระดับผู้ใช้งานในระบบ |
-| `created_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันและเวลาที่สมัครสมาชิก |
-| `updated_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันและเวลาที่อัปเดตข้อมูลล่าสุด |
+| `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันและเวลาที่สมัครสมาชิก |
+| `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันและเวลาที่อัปเดตข้อมูลล่าสุด |
 
 ---
 
 #### 2.2 ตาราง `rooms` (ตารางข้อมูลห้องสตรีมมิ่ง)
 | ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
 | :--- | :--- | :---: | :--- | :--- |
-| `id` | `VARCHAR(36)` | NO | PRIMARY KEY | รหัสประจำตัวห้องในรูปแบบ UUID |
+| `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำตัวห้อง (Auto Increment) |
 | `room_code` | `CHAR(8)` | NO | UNIQUE | รหัสประจำห้องเป็นตัวเลข 8 หลักไม่ซ้ำกัน (Unique 8-digit Code เช่น `12345678`) สำหรับค้นหาและแชร์ URL |
 | `title` | `VARCHAR(150)` | NO | - | ชื่อห้องสตรีมมิ่งที่แสดงใน Room Directory |
 | `description` | `TEXT` | YES | NULL | คำอธิบายรายละเอียดเกี่ยวกับห้องหรือวิดีโอ |
-| `host_id` | `VARCHAR(36)` | NO | - | ผู้สร้างห้องที่มีสิทธิ์ Host Control |
+| `host_id` | `INT` | NO | - | ผู้สร้างห้องที่มีสิทธิ์ Host Control |
 | `status` | `ENUM('active', 'ended')` | NO | DEFAULT `'active'` | สถานะของห้อง (กำลังเปิดอยู่ หรือ ปิดแล้ว) |
 | `media_type` | `ENUM('none', 'youtube', 'local_file')` | NO | DEFAULT `'none'` | ชนิดของสื่อที่กำลังสตรีมอยู่ขณะนี้ |
-| `current_media_id` | `VARCHAR(36)` | YES | NULL | อ้างอิงวิดีโอปัจจุบันที่กำลังเล่น |
+| `current_media_id` | `INT` | YES | NULL | อ้างอิงวิดีโอปัจจุบันที่กำลังเล่น |
 | `is_private` | `BOOLEAN` | NO | DEFAULT `FALSE` | ห้องส่วนตัว (ต้องใส่รหัสผ่านก่อนเข้า) |
 | `passcode_hash` | `VARCHAR(255)` | YES | NULL | รหัสผ่านเข้าห้องที่ผ่านการ Hash (ถ้ามี) |
 | `max_participants` | `INT` | NO | DEFAULT `50` | จำนวนผู้ชมสูงสุดที่อนุญาตในห้อง |
-| `created_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่สร้างห้อง |
-| `updated_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่มีการแก้ไขข้อมูลห้อง |
-| `ended_at` | `TIMESTAMP` | YES | NULL | วันเวลาที่ Host สั่งปิดห้อง |
+| `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่สร้างห้อง |
+| `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่มีการแก้ไขข้อมูลห้อง |
+| `ended_at` | `DATETIME` | YES | NULL | วันเวลาที่ Host สั่งปิดห้อง |
 
 ---
 
 #### 2.3 ตาราง `media` (ตารางสื่อวิดีโอ ทั้ง YouTube และ Local File)
 | ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
 | :--- | :--- | :---: | :--- | :--- |
-| `id` | `VARCHAR(36)` | NO | PRIMARY KEY | รหัสประจำตัวสื่อในรูปแบบ UUID |
-| `room_id` | `VARCHAR(36)` | YES | NULL | ห้องที่นำสื่อนี้มาเปิด (NULL หากเป็นคลังไฟล์) |
-| `uploader_id` | `VARCHAR(36)` | NO | - | ผู้ใช้ที่นำเข้าหรืออัปโหลดวิดีโอนี้ |
+| `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำตัวสื่อ (Auto Increment) |
+| `room_id` | `INT` | YES | NULL | ห้องที่นำสื่อนี้มาเปิด (NULL หากเป็นคลังไฟล์) |
+| `uploader_id` | `INT` | NO | - | ผู้ใช้ที่นำเข้าหรืออัปโหลดวิดีโอนี้ |
 | `source_type` | `ENUM('youtube', 'local_file')` | NO | - | แหล่งที่มาของวิดีโอ (YouTube หรือไฟล์เซิร์ฟเวอร์) |
 | `title` | `VARCHAR(255)` | NO | - | ชื่อของคลิปวิดีโอหรือชื่อไฟล์เดิม |
 | `source_url` | `VARCHAR(1000)` | NO | - | URL ของวิดีโอสำหรับสตรีม หรือ YouTube URL |
@@ -350,8 +355,8 @@ erDiagram
 | `file_size_bytes` | `BIGINT` | YES | NULL | ขนาดไฟล์หน่วยไบต์ (ตรวจสอบไม่เกิน 500MB = 524,288,000 bytes) |
 | `mime_type` | `VARCHAR(50)` | YES | NULL | ประเภทไฟล์ เช่น `video/mp4`, `video/webm` |
 | `duration_seconds` | `INT` | YES | NULL | ความยาวของวิดีโอในหน่วยวินาที |
-| `created_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่เพิ่มข้อมูลสื่อ |
-| `updated_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่มีการแก้ไขข้อมูลสื่อล่าสุด |
+| `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่เพิ่มข้อมูลสื่อ |
+| `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่มีการแก้ไขข้อมูลสื่อล่าสุด |
 
 ---
 
@@ -360,50 +365,50 @@ erDiagram
 
 | ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
 | :--- | :--- | :---: | :--- | :--- |
-| `room_id` | `VARCHAR(36)` | NO | PRIMARY KEY | รหัสห้องสตรีม (1 ห้องมี 1 Record สถานะ) |
+| `room_id` | `INT` | NO | PRIMARY KEY | รหัสห้องสตรีม (1 ห้องมี 1 Record สถานะ) |
 | `current_time` | `DECIMAL(10, 3)` | NO | DEFAULT `0.000` | ตำแหน่งเวลาปัจจุบันของวิดีโอ (วินาที ละเอียดถึงเสี้ยววินาที) |
 | `is_playing` | `BOOLEAN` | NO | DEFAULT `FALSE` | กำลังเล่นอยู่ (`TRUE`) หรือ หยุดชั่วคราว (`FALSE`) |
 | `playback_speed` | `DECIMAL(3, 2)` | NO | DEFAULT `1.00` | ความเร็วการเล่นที่ Host ตั้งไว้ (เช่น 0.75, 1.00, 1.50) |
 | `volume` | `DECIMAL(3, 2)` | NO | DEFAULT `1.00` | ระดับเสียงหลักของ Host (0.00 ถึง 1.00) |
-| `updated_by` | `VARCHAR(36)` | NO | - | ผู้สั่งเปลี่ยนสถานะ (ตรวจสอบสิทธิ์ต้องเป็น Host) |
-| `created_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่เริ่มต้นสถานะห้อง |
-| `updated_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่ซิงค์หรืออัปเดตสถานะล่าสุด ใช้คำนวณ Time Drift |
+| `updated_by` | `INT` | NO | - | ผู้สั่งเปลี่ยนสถานะ (ตรวจสอบสิทธิ์ต้องเป็น Host) |
+| `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่เริ่มต้นสถานะห้อง |
+| `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่ซิงค์หรืออัปเดตสถานะล่าสุด ใช้คำนวณ Time Drift |
 
 ---
 
 #### 2.5 ตาราง `room_participants` (ตารางผู้เข้าร่วมห้องและสถานะการเชื่อมต่อ)
 | ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
 | :--- | :--- | :---: | :--- | :--- |
-| `id` | `VARCHAR(36)` | NO | PRIMARY KEY | รหัสประจำรายการในรูปแบบ UUID |
-| `room_id` | `VARCHAR(36)` | NO | - | ห้องที่เข้าร่วม |
-| `user_id` | `VARCHAR(36)` | NO | - | ผู้ใช้ที่เป็นสมาชิกที่เข้าร่วมห้อง |
+| `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำรายการ (Auto Increment) |
+| `room_id` | `INT` | NO | - | ห้องที่เข้าร่วม |
+| `user_id` | `INT` | NO | - | ผู้ใช้ที่เป็นสมาชิกที่เข้าร่วมห้อง |
 | `socket_id` | `VARCHAR(100)` | YES | NULL | รหัส Socket ID สำหรับติดต่อเฉพาะ Client |
 | `role` | `ENUM('host', 'viewer')` | NO | DEFAULT `'viewer'` | บทบาทในห้อง (Host ผู้ควบคุม หรือ Viewer ผู้ชม) |
 | `is_connected` | `BOOLEAN` | NO | DEFAULT `TRUE` | สถานะการเชื่อมต่อออนไลน์ในห้อง |
-| `joined_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่เข้าห้อง |
-| `left_at` | `TIMESTAMP` | YES | NULL | วันเวลาที่ออกจากห้อง |
-| `created_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่สร้างรายการ |
-| `updated_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่อัปเดตสถานะล่าสุด |
+| `joined_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่เข้าห้อง |
+| `left_at` | `DATETIME` | YES | NULL | วันเวลาที่ออกจากห้อง |
+| `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่สร้างรายการ |
+| `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่อัปเดตสถานะล่าสุด |
 
 ---
 
 #### 2.6 ตาราง `room_messages` (ตารางข้อความแชทในห้อง)
 | ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
 | :--- | :--- | :---: | :--- | :--- |
-| `id` | `VARCHAR(36)` | NO | PRIMARY KEY | รหัสประจำข้อความในรูปแบบ UUID |
-| `room_id` | `VARCHAR(36)` | NO | - | ห้องที่ส่งข้อความนี้ |
-| `sender_id` | `VARCHAR(36)` | YES | NULL | ผู้ใช้ที่ส่งข้อความ (NULL หากเป็นข้อความจากระบบ / System) |
+| `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำข้อความ (Auto Increment) |
+| `room_id` | `INT` | NO | - | ห้องที่ส่งข้อความนี้ |
+| `sender_id` | `INT` | YES | NULL | ผู้ใช้ที่ส่งข้อความ (NULL หากเป็นข้อความจากระบบ / System) |
 | `sender_name` | `VARCHAR(100)` | NO | - | ชื่อผู้ส่งที่แสดงในกล่องแชท |
 | `message` | `TEXT` | NO | - | ข้อความแชท |
 | `message_type` | `ENUM('chat', 'system')` | NO | DEFAULT `'chat'` | ประเภทข้อความ (แชททั่วไป หรือ ข้อความแจ้งเตือนจากระบบ) |
-| `created_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP` | เวลาที่ส่งข้อความ |
-| `updated_at` | `TIMESTAMP` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่มีการแก้ไขข้อความล่าสุด |
+| `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | เวลาที่ส่งข้อความ |
+| `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่มีการแก้ไขข้อความล่าสุด |
 
 ---
 
 ## ⚡ สเปกการสื่อสารแบบเรียลไทม์ (Socket.io Event Specifications)
 
-เพื่อให้การทำงานระหว่าง Frontend ([Next.js](file:///d:/KU/Web%20App/YouStream/frontend)) และ Backend ([Hono](file:///d:/KU/Web%20App/YouStream/backend)) สอดคล้องตามกลไกใน [README.md](file:///d:/KU/Web%20App/YouStream/README.md) ระบบกำหนด Event หลักดังนี้:
+เพื่อให้การทำงานระหว่าง Frontend Next.js และ Backend Hono ระบบกำหนด Event หลักดังนี้:
 
 | หมวดหมู่ (Category) | ชื่อ Event (Event Name) | ทิศทาง (Direction) | ข้อมูลที่ส่ง (Payload) | คำอธิบาย (Description) |
 | :--- | :--- | :---: | :--- | :--- |
