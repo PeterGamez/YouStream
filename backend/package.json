@@ -13,6 +13,7 @@
   "dependencies": {
     "@hono/node-server": "^2.1.1",
     "hono": "^4.13.10",
+    "ioredis": "^6.0.0",
     "mysql2": "^3.24.4",
     "socket.io": "^4.8.4"
   },
