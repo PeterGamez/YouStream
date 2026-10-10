@@ -3,6 +3,9 @@ import type { Socket } from "socket.io";
 import { Server as IOServer } from "socket.io";
 
 import type Server from "../Server";
+import RoomSocket from "../sockets/RoomSocket";
+import MediaSocket from "../sockets/MediaSocket";
+import ChatSocket from "../sockets/ChatSocket";
 
 export default class SocketService {
     public static io: IOServer;
@@ -18,6 +21,10 @@ export default class SocketService {
             },
         });
 
+        RoomSocket.init(this.io, server);
+        MediaSocket.init(this.io, server);
+        ChatSocket.init(this.io, server);
+
         this.registerEvents();
 
         server.log("Socket.IO", `Socket server running at ws://localhost:${server.config.port}`);
@@ -26,6 +33,9 @@ export default class SocketService {
     private static registerEvents(): void {
         this.io.on("connection", (socket: Socket) => {
             this.server.log("Socket.IO", `Client connected: ${socket.id}`);
+            RoomSocket.register(socket);
+            MediaSocket.register(socket);
+            ChatSocket.register(socket);
         });
     }
 
