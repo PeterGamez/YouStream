@@ -1,6 +1,9 @@
+import { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 
 import type Server from "../Server";
+import { UserInterface } from "../interfaces/Database";
+import UserService from "../services/UserService";
 
 export default class Middleware {
     private server: Server;
@@ -28,5 +31,34 @@ export default class Middleware {
 
             await next();
         });
+    }
+
+    public adminOnly() {
+        return createMiddleware(async (c, next): Promise<Response> => {
+            const user = await this.getUser(c);
+            if (!user) {
+                return c.json({ error: "User not found" }, 404);
+            }
+
+            if (user.role !== "admin") {
+                return c.json({ error: "Forbidden" }, 403);
+            }
+
+            await next();
+        });
+    }
+
+    public async getUser(c: Context): Promise<UserInterface> {
+        const cachedUser = c.get("authUser");
+        if (cachedUser) {
+            return cachedUser;
+        }
+
+        const payload = c.get("jwtPayload");
+        const { userId } = payload;
+
+        const user = await UserService.getUser(userId);
+        c.set("authUser", user);
+        return user;
     }
 }

@@ -6,8 +6,6 @@ import { logger } from "hono/logger";
 import Server from "./Server";
 import { initModels, initRoutes } from "./bootstrap";
 import DatabaseHandler from "./handlers/DatabaseHandler";
-import type { JWTPayload } from "./interfaces/Auth";
-import type { UserInterface } from "./interfaces/Database";
 import RedisService from "./services/RedisService";
 import SocketService from "./services/SocketService";
 
@@ -54,10 +52,3 @@ async function run() {
 }
 
 run();
-
-declare module "hono" {
-    interface ContextVariableMap {
-        jwtPayload: JWTPayload;
-        authUser: UserInterface;
-    }
-}
