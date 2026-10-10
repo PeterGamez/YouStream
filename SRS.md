@@ -161,10 +161,10 @@ sequenceDiagram
 
     Host->>FE_Host: วางลิงก์ YouTube
     FE_Host->>FE_Host: สกัด Video ID จาก URL
-    FE_Host->>BE: Socket Emit ('media:change', { type: 'youtube', videoId })
+    FE_Host->>BE: Socket Emit ('video:change', { type: 'youtube', videoId })
     BE->>Redis: แคช Current Media & Playback State บน Redis
-    BE-->>FE_Host: Broadcast ('media:update', data)
-    BE-->>FE_Viewer: Broadcast ('media:update', data)
+    BE-->>FE_Host: Broadcast ('video:update', data)
+    BE-->>FE_Viewer: Broadcast ('video:update', data)
     Note over FE_Host, FE_Viewer: เครื่องเล่น YouTube IFrame API โหลด Video ID เดียวกัน
     Host->>FE_Host: สั่ง Play / Pause / Seek
     FE_Host->>BE: Socket Emit ('video:control', { action, currentTime, speed })
@@ -192,9 +192,9 @@ sequenceDiagram
     Note over BE: ตรวจสอบ MIME type, ตรวจสอบขนาด <= 500MB, บันทึกลง Storage
     BE->>MariaDB: บันทึกข้อมูลมีเดียลงตาราง media
     BE-->>FE_Host: HTTP Response 201 Created { fileUrl, mediaId, title }
-    FE_Host->>Socket: Socket Emit ('media:change', { type: 'local_file', url: fileUrl })
+    FE_Host->>Socket: Socket Emit ('video:change', { type: 'local_file', url: fileUrl })
     Socket->>Redis: บันทึก Current Media & Playback State ลง Redis
-    Socket-->>FE_Viewer: Broadcast ('media:update', { type: 'local_file', url: fileUrl })
+    Socket-->>FE_Viewer: Broadcast ('video:update', { type: 'local_file', url: fileUrl })
     Note over FE_Host, FE_Viewer: แท็ก <video> ของทุกคนโหลดไฟล์สตรีมจาก fileUrl
     Host->>FE_Host: สั่ง Play / Pause / Seek / Speed
     FE_Host->>Socket: Socket Emit ('video:control', { action, currentTime, speed })
@@ -496,8 +496,8 @@ erDiagram
 | | `room:user-joined` | Server -> Room | `{ userId, displayName, role }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนเข้ามาใหม่ |
 | | `room:user-left` | Server -> Room | `{ userId, displayName }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนออกไป |
 | | `room:ended` | Server -> Room | `{ roomId, reason? }` | แจ้งเตือนทุกคนในห้องเมื่อห้องถูกปิดโดย Host หรือ Admin |
-| **Media Selection** | `media:change` | Host -> Server | `{ roomId, sourceType, youtubeId?, fileUrl?, title }` | Host สั่งเปลี่ยนวิดีโอ (YouTube หรือ Local file) |
-| | `media:update` | Server -> Room | `{ mediaId, sourceType, youtubeId?, fileUrl?, title }` | กระจายวิดีโอใหม่ให้ทุกคนในห้องสลับเครื่องเล่นพร้อมกัน |
+| **Video Selection** | `video:change` | Host -> Server | `{ roomId, sourceType, youtubeId?, fileUrl?, title }` | Host สั่งเปลี่ยนวิดีโอ (YouTube หรือ Local file) |
+| | `video:update` | Server -> Room | `{ mediaId, sourceType, youtubeId?, fileUrl?, title }` | กระจายวิดีโอใหม่ให้ทุกคนในห้องสลับเครื่องเล่นพร้อมกัน |
 | **Playback Sync** | `video:control` | Host -> Server | `{ roomId, action, currentTime, speed?, volume? }` | Host สั่งควบคุม (action: `play`, `pause`, `seek`, `ratechange`) |
 | | `video:sync` | Server -> Viewers | `{ action, currentTime, speed, timestamp }` | Broadcast คำสั่งให้เฉพาะฝั่ง Viewers ซิงค์เวลาตามทันที |
 | **Live Chat** | `chat:send` | Client -> Server | `{ roomId, message }` | ผู้ใช้ส่งข้อความแชทในห้อง |

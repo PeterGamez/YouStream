@@ -4,7 +4,7 @@ import { Server as IOServer } from "socket.io";
 
 import type Server from "../Server";
 import RoomSocket from "../sockets/RoomSocket";
-import MediaSocket from "../sockets/MediaSocket";
+import VideoSocket from "../sockets/VideoSocket";
 import ChatSocket from "../sockets/ChatSocket";
 
 export default class SocketService {
@@ -22,7 +22,7 @@ export default class SocketService {
         });
 
         RoomSocket.init(this.io, server);
-        MediaSocket.init(this.io, server);
+        VideoSocket.init(this.io, server);
         ChatSocket.init(this.io, server);
 
         this.registerEvents();
@@ -34,7 +34,7 @@ export default class SocketService {
         this.io.on("connection", (socket: Socket) => {
             this.server.log("Socket.IO", `Client connected: ${socket.id}`);
             RoomSocket.register(socket);
-            MediaSocket.register(socket);
+            VideoSocket.register(socket);
             ChatSocket.register(socket);
         });
     }

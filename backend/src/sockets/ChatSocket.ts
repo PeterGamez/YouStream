@@ -1,26 +1,7 @@
 import type { Server as IOServer, Socket } from "socket.io";
 
 import type Server from "../Server";
-
-export interface ChatSendPayload {
-    roomId: number | string;
-    message: string;
-}
-
-export interface ChatMessagePayload {
-    id: string;
-    senderId: number | null;
-    senderName: string;
-    avatarUrl?: string;
-    message: string;
-    messageType: "chat" | "system";
-    createdAt: string;
-}
-
-export interface SocketErrorPayload {
-    code: string;
-    message: string;
-}
+import type { ChatMessagePayload, ChatSendPayload, SocketErrorPayload } from "../interfaces/Socket";
 
 export default class ChatSocket {
     private static io: IOServer;

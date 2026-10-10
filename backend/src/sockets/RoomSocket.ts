@@ -1,20 +1,7 @@
 import type { Server as IOServer, Socket } from "socket.io";
 
 import type Server from "../Server";
-
-export interface RoomJoinPayload {
-    roomId: number | string;
-    passcode?: string;
-}
-
-export interface RoomLeavePayload {
-    roomId: number | string;
-}
-
-export interface RoomEndPayload {
-    roomId: number | string;
-    reason?: string;
-}
+import type { RoomEndPayload, RoomJoinPayload, RoomLeavePayload } from "../interfaces/Socket";
 
 export default class RoomSocket {
     private static io: IOServer;

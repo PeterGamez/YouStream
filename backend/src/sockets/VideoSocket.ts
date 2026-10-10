@@ -1,24 +1,9 @@
 import type { Server as IOServer, Socket } from "socket.io";
 
 import type Server from "../Server";
+import type { VideoChangePayload, VideoControlPayload } from "../interfaces/Socket";
 
-export interface MediaChangePayload {
-    roomId: number | string;
-    sourceType: "youtube" | "local_file";
-    youtubeId?: string;
-    fileUrl?: string;
-    title?: string;
-}
-
-export interface VideoControlPayload {
-    roomId: number | string;
-    action: "play" | "pause" | "seek" | "ratechange";
-    currentTime: number;
-    speed?: number;
-    volume?: number;
-}
-
-export default class MediaSocket {
+export default class VideoSocket {
     private static io: IOServer;
     private static server: Server;
 
@@ -28,15 +13,15 @@ export default class MediaSocket {
     }
 
     public static register(socket: Socket): void {
-        this.registerMediaEvents(socket);
+        this.registerVideoEvents(socket);
     }
 
-    private static registerMediaEvents(socket: Socket): void {
-        socket.on("media:change", (data: MediaChangePayload) => {
+    private static registerVideoEvents(socket: Socket): void {
+        socket.on("video:change", (data: VideoChangePayload) => {
             const roomKey = `room:${data.roomId}`;
-            this.server.log("Socket:Media", `Media changed in ${roomKey}: ${data.sourceType}`);
+            this.server.log("Socket:Video", `Video changed in ${roomKey}: ${data.sourceType}`);
 
-            this.io.to(roomKey).emit("media:update", {
+            this.io.to(roomKey).emit("video:update", {
                 mediaId: 1,
                 sourceType: data.sourceType,
                 youtubeId: data.youtubeId,
