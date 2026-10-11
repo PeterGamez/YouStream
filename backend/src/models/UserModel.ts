@@ -84,11 +84,10 @@ export default class UserModel {
 
     public static async selectUserExistsByUsernameOrEmail(username: string, email: string): Promise<boolean> {
         const sql = `SELECT COUNT(*) as count FROM ${this.table} WHERE (username = ? OR email = ?)`;
-        const params: (string | number)[] = [username, email];
 
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, params);
+            const [rows] = await connection.execute(sql, [username, email]);
             return Number(rows[0].count) > 0;
         } finally {
             connection.release();
