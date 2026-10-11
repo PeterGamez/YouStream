@@ -1,9 +1,11 @@
-import { createReadStream, existsSync, statSync, unlinkSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { createReadStream, createWriteStream, existsSync, statSync, unlinkSync } from "node:fs";
+import { mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import type { BlankEnv, BlankSchema } from "hono/types";
 
 import type Server from "../Server";
@@ -106,61 +108,90 @@ export default class MediaRoute implements RouteInterface {
         // Apply JWT Authentication to all subsequent media management endpoints
         this.app.use("*", this.server.Middleware.auth());
 
-        this.app.post("/upload", async (c) => {
-            try {
-                const user = await this.server.Middleware.getUser(c);
-                if (!user) {
-                    return c.json({ error: "Unauthorized" }, 401);
+        this.app.post(
+            "/upload",
+            bodyLimit({
+                maxSize: MediaRoute.MAX_FILE_SIZE,
+                onError: (c) => {
+                    return c.json({ error: "File exceeds maximum size limit of 500MB" }, 413);
+                },
+            }),
+            async (c) => {
+                try {
+                    const user = await this.server.Middleware.getUser(c);
+                    if (!user) {
+                        return c.json({ error: "Unauthorized" }, 401);
+                    }
+
+                    await this.ensureUploadDir();
+
+                    const body: Record<string, string | File | (string | File)[]> = await c.req.parseBody();
+                    const file = body["file"];
+
+                    if (!file || !(file instanceof File)) {
+                        return c.json({ error: "No video file provided" }, 400);
+                    }
+
+                    if (!MediaRoute.ALLOWED_MIME_TYPES.includes(file.type)) {
+                        return c.json({ error: "Invalid video format. Only video/mp4 and video/webm are supported" }, 400);
+                    }
+
+                    if (file.size > MediaRoute.MAX_FILE_SIZE) {
+                        return c.json({ error: "File exceeds maximum size limit of 500MB" }, 413);
+                    }
+
+                    const ext = path.extname(file.name) || (file.type === "video/webm" ? ".webm" : ".mp4");
+                    const cleanBase = path.basename(file.name, ext).replace(/[^a-zA-Z0-9_-]/g, "_");
+                    const uniqueFilename = `${Date.now()}_${cleanBase}${ext}`;
+                    const targetPath = path.join(this.uploadDir, uniqueFilename);
+
+                    let bytesWritten = 0;
+                    const sizeLimiter = new Transform({
+                        transform(chunk: Buffer, _encoding, callback) {
+                            bytesWritten += chunk.length;
+                            if (bytesWritten > MediaRoute.MAX_FILE_SIZE) {
+                                callback(new Error("File exceeds maximum size limit of 500MB"));
+                            } else {
+                                callback(null, chunk);
+                            }
+                        },
+                    });
+
+                    const writeStream = createWriteStream(targetPath);
+                    try {
+                        await pipeline(Readable.fromWeb(file.stream() as any), sizeLimiter, writeStream);
+                    } catch (streamError: any) {
+                        await unlink(targetPath).catch(() => {});
+                        if (bytesWritten > MediaRoute.MAX_FILE_SIZE || streamError?.message?.includes("exceeds")) {
+                            return c.json({ error: "File exceeds maximum size limit of 500MB" }, 413);
+                        }
+                        throw streamError;
+                    }
+
+                    const fileUrl = `/media/stream/${uniqueFilename}`;
+
+                    const mediaId = await MediaModel.createMedia(user.id, "local_file", file.name, fileUrl, null, targetPath, bytesWritten || file.size, file.type, null);
+
+                    this.server.log("Media Route", `User ${user.id} uploaded ${file.name} (${bytesWritten || file.size} bytes) -> mediaId ${mediaId}`);
+
+                    return c.json(
+                        {
+                            message: "File uploaded successfully",
+                            mediaId,
+                            title: file.name,
+                            fileUrl,
+                            sourceType: "local_file",
+                            fileSizeBytes: bytesWritten || file.size,
+                            mimeType: file.type,
+                        },
+                        201
+                    );
+                } catch (error: any) {
+                    this.server.error("Media Route", `Upload error: ${error?.message || error}`);
+                    return c.json({ error: "Failed to upload file" }, 500);
                 }
-
-                await this.ensureUploadDir();
-
-                const body = await c.req.parseBody();
-                const file = body["file"];
-
-                if (!file || !(file instanceof File)) {
-                    return c.json({ error: "No video file provided" }, 400);
-                }
-
-                if (!MediaRoute.ALLOWED_MIME_TYPES.includes(file.type)) {
-                    return c.json({ error: "Invalid video format. Only video/mp4 and video/webm are supported" }, 400);
-                }
-
-                if (file.size > MediaRoute.MAX_FILE_SIZE) {
-                    return c.json({ error: "File exceeds maximum size limit of 500MB" }, 400);
-                }
-
-                const ext = path.extname(file.name) || (file.type === "video/webm" ? ".webm" : ".mp4");
-                const cleanBase = path.basename(file.name, ext).replace(/[^a-zA-Z0-9_-]/g, "_");
-                const uniqueFilename = `${Date.now()}_${cleanBase}${ext}`;
-                const targetPath = path.join(this.uploadDir, uniqueFilename);
-
-                const arrayBuffer = await file.arrayBuffer();
-                await writeFile(targetPath, Buffer.from(arrayBuffer));
-
-                const fileUrl = `/media/stream/${uniqueFilename}`;
-
-                const mediaId = await MediaModel.createMedia(user.id, "local_file", file.name, fileUrl, null, targetPath, file.size, file.type, null);
-
-                this.server.log("Media Route", `User ${user.id} uploaded ${file.name} (${file.size} bytes) -> mediaId ${mediaId}`);
-
-                return c.json(
-                    {
-                        message: "File uploaded successfully",
-                        mediaId,
-                        title: file.name,
-                        fileUrl,
-                        sourceType: "local_file",
-                        fileSizeBytes: file.size,
-                        mimeType: file.type,
-                    },
-                    201
-                );
-            } catch (error: any) {
-                this.server.error("Media Route", `Upload error: ${error?.message || error}`);
-                return c.json({ error: "Failed to upload file" }, 500);
             }
-        });
+        );
 
         this.app.post("/youtube", async (c) => {
             try {

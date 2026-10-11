@@ -6,7 +6,6 @@ import AuthRoute from "../routes/AuthRoute";
 import IndexRoute from "../routes/IndexRoute";
 import MediaRoute from "../routes/MediaRoute";
 import RoomRoute from "../routes/RoomRoute";
-import UploadRoute from "../routes/UploadRoute";
 import UserRoute from "../routes/UserRoute";
 
 export function initRoutes(server: Server, app: Hono) {
@@ -16,6 +15,5 @@ export function initRoutes(server: Server, app: Hono) {
     new UserRoute(server).getApp(app);
     new RoomRoute(server).getApp(app);
     new MediaRoute(server).getApp(app);
-    new UploadRoute(server).getApp(app);
     new AdminRoute(server).getApp(app);
 }

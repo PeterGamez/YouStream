@@ -59,7 +59,7 @@ export default class RoomSocket {
             }
 
             // 3. Resolve user identity and role
-            const userId = socket.data?.userId || socket.data?.user?.id || 1;
+            const userId = socket.data?.userId || socket.data?.user?.id;
             const isAdmin = socket.data?.user?.role === "admin";
             const isHost = room.hostId === userId || isAdmin;
 
@@ -174,7 +174,7 @@ export default class RoomSocket {
             this.server.log("Socket:Room", `Client ${socket.id} left ${roomKey}`);
 
             this.io.to(roomKey).emit("room:user-left", {
-                userId: userId || 2,
+                userId: userId,
                 displayName: socket.data?.user?.displayName || "ViewerName",
             });
         });

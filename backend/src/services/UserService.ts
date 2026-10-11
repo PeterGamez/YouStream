@@ -13,6 +13,10 @@ export default class UserService {
         }
 
         const user = await UserModel.selectUser(userId);
+        if (!user) {
+            return null;
+        }
+
         await this.setUser(userId, user);
         return user;
     }
