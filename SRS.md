@@ -413,15 +413,15 @@ erDiagram
 - **Fields & Values:**
   | Field | ชนิดข้อมูล | ตัวอย่างค่า | คำอธิบาย |
   | :--- | :--- | :--- | :--- |
-  | `mediaId` | `string` (Integer) | `"1"` | รหัสสื่อวิดีโอปัจจุบันที่กำลังเล่น (หรือ `""` หากยังไม่เปิดสื่อ) |
-  | `mediaType` | `string` | `"youtube"` | ประเภทของสื่อ (`"youtube"`, `"local_file"` หรือ `"none"`) |
-  | `sourceUrl` | `string` | `"dQw4w9WgXcQ"` | URL ของไฟล์วิดีโอ หรือ YouTube Video ID สำหรับสตรีม |
-  | `currentTime` | `string` (Float) | `"124.580"` | ตำแหน่งเวลาของวิดีโอปัจจุบัน (วินาที ละเอียดถึงทศนิยม 3 ตำแหน่ง) |
-  | `isPlaying` | `string` (Boolean) | `"true"` | สถานะกำลังเล่น (`true`) หรือหยุดชั่วคราว (`false`) |
-  | `playbackSpeed` | `string` (Float) | `"1.25"` | ความเร็วในการเล่นวิดีโอที่ Host กำหนด |
+  | `media_id` | `string` (Integer) | `"1"` | รหัสสื่อวิดีโอปัจจุบันที่กำลังเล่น (หรือ `""` หากยังไม่เปิดสื่อ) |
+  | `media_type` | `string` | `"youtube"` | ประเภทของสื่อ (`"youtube"`, `"local_file"` หรือ `"none"`) |
+  | `source_url` | `string` | `"dQw4w9WgXcQ"` | URL ของไฟล์วิดีโอ หรือ YouTube Video ID สำหรับสตรีม |
+  | `current_time` | `string` (Float) | `"124.580"` | ตำแหน่งเวลาของวิดีโอปัจจุบัน (วินาที ละเอียดถึงทศนิยม 3 ตำแหน่ง) |
+  | `is_playing` | `string` (Boolean) | `"true"` | สถานะกำลังเล่น (`true`) หรือหยุดชั่วคราว (`false`) |
+  | `playback_speed` | `string` (Float) | `"1.25"` | ความเร็วในการเล่นวิดีโอที่ Host กำหนด |
   | `volume` | `string` (Float) | `"1.00"` | ระดับเสียงหลักของ Host (0.00 - 1.00) |
-  | `updatedBy` | `string` (Integer) | `"5"` | `id` ของ Host ผู้สั่งควบคุมล่าสุด |
-  | `updatedAt` | `string` (ISO 8601) | `"2026-10-09T15:20:00.123Z"` | เวลาที่ส่งคำสั่ง เพื่อนำไปคำนวณ Time Drift ชดเชยความหน่วงฝั่งผู้ชม |
+  | `updated_by` | `string` (Integer) | `"5"` | `id` ของ Host ผู้สั่งควบคุมล่าสุด |
+  | `updated_at` | `string` (ISO 8601) | `"2026-10-09T15:20:00.123Z"` | เวลาที่ส่งคำสั่ง เพื่อนำไปคำนวณ Time Drift ชดเชยความหน่วงฝั่งผู้ชม |
 - **คำสั่งและกลไกการทำงาน:** บันทึกสถานะด้วยคำสั่ง `HSET` หรือ `HMSET room:{roomId}:playback` และดึงข้อมูลสถานะล่าสุดส่งให้ Late-joiner ด้วยคำสั่ง `HGETALL room:{roomId}:playback`
 
 ##### 3.2.2 รายชื่อผู้เข้าร่วมและสถานะออนไลน์ (`room:{roomId}:participants` - Hash)
@@ -430,12 +430,12 @@ erDiagram
 - **Value (JSON Schema):**
   ```json
   {
-    "userId": 5,
-    "displayName": "SomsakDev",
-    "avatarUrl": "https://lh3.googleusercontent.com/a/...",
+    "user_id": 5,
+    "display_name": "SomsakDev",
+    "avatar_url": "https://lh3.googleusercontent.com/a/...",
     "role": "host",
-    "socketId": "sock_xY99aK10",
-    "joinedAt": "2026-10-09T15:10:00.000Z"
+    "socket_id": "sock_xY99aK10",
+    "joined_at": "2026-10-09T15:10:00.000Z"
   }
   ```
 - **กลไกการทำงาน (Operations):**
@@ -450,12 +450,12 @@ erDiagram
   ```json
   {
     "id": "msg_1728461234567",
-    "senderId": 5,
-    "senderName": "SomsakDev",
-    "avatarUrl": "https://lh3.googleusercontent.com/a/...",
+    "sender_id": 5,
+    "sender_name": "SomsakDev",
+    "avatar_url": "https://lh3.googleusercontent.com/a/...",
     "message": "คลิปนี้สนุกมากเลยครับ!",
-    "messageType": "chat",
-    "createdAt": "2026-10-09T15:12:45.000Z"
+    "message_type": "chat",
+    "created_at": "2026-10-09T15:12:45.000Z"
   }
   ```
 - **กลไกการทำงาน (Operations):**
@@ -465,9 +465,9 @@ erDiagram
 ##### 3.2.4 ตรวจสอบ Session เมื่อ Socket หลุดการเชื่อมต่อ (`socket:{socketId}:session` - Hash)
 - **Key ตัวอย่าง:** `socket:sock_xY99aK10:session`
 - **Fields:**
-  - `userId`: `"5"`
-  - `roomId`: `"101"`
-- **กลไกการทำงาน (Operations):** เมื่อ Socket หลุดการเชื่อมต่อ (Disconnect) ดึงข้อมูลด้วยคำสั่ง `HGETALL socket:{socketId}:session` เพื่อทราบ `roomId` และ `userId` จากนั้นลบผู้ใช้ออกจากห้องด้วยคำสั่ง `HDEL` และลบคีย์ด้วยคำสั่ง `DEL` แบบ $O(1)$ โดยไม่ต้องวนลูปค้นหา
+  - `user_id`: `"5"`
+  - `room_id`: `"101"`
+- **กลไกการทำงาน (Operations):** เมื่อ Socket หลุดการเชื่อมต่อ (Disconnect) ดึงข้อมูลด้วยคำสั่ง `HGETALL socket:{socketId}:session` เพื่อทราบ `room_id` และ `user_id` จากนั้นลบผู้ใช้ออกจากห้องด้วยคำสั่ง `HDEL` และลบคีย์ด้วยคำสั่ง `DEL` แบบ $O(1)$ โดยไม่ต้องวนลูปค้นหา
 
 ##### 3.2.5 รายการห้องที่เปิดใช้งาน (`active_rooms` - Set)
 - **Key:** `active_rooms`

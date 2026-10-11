@@ -1,6 +1,16 @@
 import type Redis from "ioredis";
 
-import type { RedisChatMessage, RedisParticipant, RedisPlaybackMediaType, RedisPlaybackState, RedisSocketSession } from "../interfaces/Redis";
+import type {
+    RedisChatMessage,
+    RedisChatMessageRaw,
+    RedisParticipant,
+    RedisParticipantRaw,
+    RedisPlaybackMediaType,
+    RedisPlaybackState,
+    RedisPlaybackStateHash,
+    RedisSocketSession,
+    RedisSocketSessionHash,
+} from "../interfaces/Redis";
 
 export default class RoomStateService {
     public static Redis: Redis;
@@ -16,7 +26,7 @@ export default class RoomStateService {
         roomMessages: (roomId: number | string) => `room:${roomId}:messages`,
         socketSession: (socketId: string) => `socket:${socketId}:session`,
         activeRooms: () => "active_rooms",
-        chatRateLimit: (userId: number | string) => `ratelimit:chat:${userId}`,
+        chatRateLimit: (userId: number | string) => `rate_limit:chat:${userId}`,
         userCache: (userId: number | string) => `user:${userId}`,
     };
 
@@ -26,38 +36,39 @@ export default class RoomStateService {
 
     public static async setPlaybackState(roomId: number | string, state: Partial<RedisPlaybackState>): Promise<void> {
         const key = this.KEYS.roomPlayback(roomId);
-        const data: Record<string, string> = {};
+        const data: Partial<RedisPlaybackStateHash> = {};
 
-        if (state.mediaId !== undefined) data.mediaId = state.mediaId !== null ? String(state.mediaId) : "";
-        if (state.mediaType !== undefined) data.mediaType = state.mediaType;
-        if (state.sourceUrl !== undefined) data.sourceUrl = state.sourceUrl;
-        if (state.currentTime !== undefined) data.currentTime = String(state.currentTime);
-        if (state.isPlaying !== undefined) data.isPlaying = String(state.isPlaying);
-        if (state.playbackSpeed !== undefined) data.playbackSpeed = String(state.playbackSpeed);
+        if (state.mediaId !== undefined) data.media_id = state.mediaId !== null ? String(state.mediaId) : "";
+        if (state.mediaType !== undefined) data.media_type = state.mediaType;
+        if (state.sourceUrl !== undefined) data.source_url = state.sourceUrl;
+        if (state.currentTime !== undefined) data.current_time = String(state.currentTime);
+        if (state.isPlaying !== undefined) data.is_playing = String(state.isPlaying);
+        if (state.playbackSpeed !== undefined) data.playback_speed = String(state.playbackSpeed);
         if (state.volume !== undefined) data.volume = String(state.volume);
-        if (state.updatedBy !== undefined) data.updatedBy = String(state.updatedBy);
-        if (state.updatedAt !== undefined) data.updatedAt = state.updatedAt;
+        if (state.updatedBy !== undefined) data.updated_by = String(state.updatedBy);
+        if (state.updatedAt !== undefined) data.updated_at = state.updatedAt;
 
         if (Object.keys(data).length > 0) {
-            await this.Redis.hset(key, data);
+            await this.Redis.hset(key, data as Record<string, string>);
         }
     }
 
     public static async getPlaybackState(roomId: number | string): Promise<RedisPlaybackState> {
         const key = this.KEYS.roomPlayback(roomId);
-        const data = await this.Redis.hgetall(key);
+        const data = (await this.Redis.hgetall(key)) as unknown as Partial<RedisPlaybackStateHash> & Record<string, string>;
         if (!data || Object.keys(data).length === 0) return null;
 
+        const mediaIdVal = data.media_id ?? data.mediaId;
         return {
-            mediaId: data.mediaId ? (isNaN(Number(data.mediaId)) ? data.mediaId : Number(data.mediaId)) : null,
-            mediaType: (data.mediaType as RedisPlaybackMediaType) || "none",
-            sourceUrl: data.sourceUrl || "",
-            currentTime: parseFloat(data.currentTime || "0"),
-            isPlaying: data.isPlaying === "true",
-            playbackSpeed: parseFloat(data.playbackSpeed || "1"),
-            volume: parseFloat(data.volume || "1"),
-            updatedBy: parseInt(data.updatedBy || "0", 10),
-            updatedAt: data.updatedAt || new Date().toISOString(),
+            mediaId: mediaIdVal ? (isNaN(Number(mediaIdVal)) ? mediaIdVal : Number(mediaIdVal)) : null,
+            mediaType: ((data.media_type ?? data.mediaType) as RedisPlaybackMediaType) || "none",
+            sourceUrl: data.source_url ?? data.sourceUrl ?? "",
+            currentTime: parseFloat(data.current_time ?? data.currentTime ?? "0"),
+            isPlaying: (data.is_playing ?? data.isPlaying) === "true",
+            playbackSpeed: parseFloat(data.playback_speed ?? data.playbackSpeed ?? "1"),
+            volume: parseFloat(data.volume ?? "1"),
+            updatedBy: parseInt(data.updated_by ?? data.updatedBy ?? "0", 10),
+            updatedAt: data.updated_at ?? data.updatedAt ?? new Date().toISOString(),
         };
     }
 
@@ -72,7 +83,15 @@ export default class RoomStateService {
     public static async addParticipant(roomId: number | string, participant: RedisParticipant): Promise<void> {
         const key = this.KEYS.roomParticipants(roomId);
         const field = this.KEYS.roomParticipantField(participant.userId);
-        await this.Redis.hset(key, field, JSON.stringify(participant));
+        const rawParticipant: RedisParticipantRaw = {
+            user_id: participant.userId,
+            display_name: participant.displayName,
+            avatar_url: participant.avatarUrl,
+            role: participant.role,
+            socket_id: participant.socketId,
+            joined_at: participant.joinedAt,
+        };
+        await this.Redis.hset(key, field, JSON.stringify(rawParticipant));
     }
 
     public static async removeParticipant(roomId: number | string, userId: number | string): Promise<number> {
@@ -87,7 +106,15 @@ export default class RoomStateService {
         const data = await this.Redis.hget(key, field);
         if (!data) return null;
         try {
-            return JSON.parse(data) as RedisParticipant;
+            const raw = JSON.parse(data);
+            return {
+                userId: raw.user_id ?? raw.userId,
+                displayName: raw.display_name ?? raw.displayName ?? "",
+                avatarUrl: raw.avatar_url ?? raw.avatarUrl ?? "",
+                role: raw.role,
+                socketId: raw.socket_id ?? raw.socketId,
+                joinedAt: raw.joined_at ?? raw.joinedAt,
+            };
         } catch {
             return null;
         }
@@ -99,7 +126,15 @@ export default class RoomStateService {
         return values
             .map((val) => {
                 try {
-                    return JSON.parse(val) as RedisParticipant;
+                    const raw = JSON.parse(val);
+                    return {
+                        userId: raw.user_id ?? raw.userId,
+                        displayName: raw.display_name ?? raw.displayName ?? "",
+                        avatarUrl: raw.avatar_url ?? raw.avatarUrl ?? "",
+                        role: raw.role,
+                        socketId: raw.socket_id ?? raw.socketId,
+                        joinedAt: raw.joined_at ?? raw.joinedAt,
+                    };
                 } catch {
                     return null;
                 }
@@ -117,7 +152,16 @@ export default class RoomStateService {
 
     public static async addMessage(roomId: number | string, message: RedisChatMessage, maxMessages = 100): Promise<void> {
         const key = this.KEYS.roomMessages(roomId);
-        await this.Redis.rpush(key, JSON.stringify(message));
+        const rawMessage: RedisChatMessageRaw = {
+            id: message.id,
+            sender_id: message.senderId,
+            sender_name: message.senderName,
+            avatar_url: message.avatarUrl,
+            message: message.message,
+            message_type: message.messageType,
+            created_at: message.createdAt,
+        };
+        await this.Redis.rpush(key, JSON.stringify(rawMessage));
         await this.Redis.ltrim(key, -maxMessages, -1);
     }
 
@@ -127,7 +171,16 @@ export default class RoomStateService {
         return messages
             .map((msg) => {
                 try {
-                    return JSON.parse(msg) as RedisChatMessage;
+                    const raw = JSON.parse(msg);
+                    return {
+                        id: raw.id,
+                        senderId: raw.sender_id ?? raw.senderId,
+                        senderName: raw.sender_name ?? raw.senderName ?? "",
+                        avatarUrl: raw.avatar_url ?? raw.avatarUrl ?? "",
+                        message: raw.message,
+                        messageType: raw.message_type ?? raw.messageType,
+                        createdAt: raw.created_at ?? raw.createdAt,
+                    };
                 } catch {
                     return null;
                 }
@@ -145,19 +198,22 @@ export default class RoomStateService {
 
     public static async setSocketSession(socketId: string, userId: number | string, roomId: number | string): Promise<void> {
         const key = this.KEYS.socketSession(socketId);
-        await this.Redis.hset(key, {
-            userId: String(userId),
-            roomId: String(roomId),
-        });
+        const sessionData: RedisSocketSessionHash = {
+            user_id: String(userId),
+            room_id: String(roomId),
+        };
+        await this.Redis.hset(key, sessionData);
     }
 
     public static async getSocketSession(socketId: string): Promise<RedisSocketSession> {
         const key = this.KEYS.socketSession(socketId);
-        const session = await this.Redis.hgetall(key);
-        if (!session || !session.userId || !session.roomId) return null;
+        const session = (await this.Redis.hgetall(key)) as unknown as Partial<RedisSocketSessionHash>;
+        const userId = session?.user_id;
+        const roomId = session?.room_id;
+        if (!session || !userId || !roomId) return null;
         return {
-            userId: Number(session.userId),
-            roomId: Number(session.roomId),
+            userId: Number(userId),
+            roomId: Number(roomId),
         };
     }
 

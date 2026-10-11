@@ -1,4 +1,4 @@
-import type { InterfaceBase } from "./InterfaceBase";
+import type { InterfaceBase, InterfaceBaseRaw } from "./InterfaceBase";
 
 export type MediaSourceType = "youtube" | "local_file";
 
@@ -16,8 +16,7 @@ export interface MediaInterface extends InterfaceBase {
 
 export type MediaSafeDTO = MediaInterface;
 
-export interface MediaRawInterface {
-    readonly id: number;
+export interface MediaRawInterface extends InterfaceBaseRaw {
     uploader_id: number;
     source_type: MediaSourceType;
     title: string;
@@ -27,6 +26,4 @@ export interface MediaRawInterface {
     file_size_bytes: number;
     mime_type: string;
     duration_seconds: number;
-    readonly created_at: Date;
-    readonly updated_at: Date;
 }

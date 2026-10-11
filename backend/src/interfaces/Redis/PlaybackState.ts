@@ -1,23 +1,23 @@
 export type RedisPlaybackMediaType = "none" | "youtube" | "local_file";
 
 /**
- * Raw Redis Hash representation where all values stored in Redis are strings
+ * Raw Redis Hash representation where all keys stored in Redis are snake_case strings
  * Key pattern: `room:{roomId}:playback`
  */
 export interface RedisPlaybackStateHash {
-    mediaId: string;
-    mediaType: RedisPlaybackMediaType | string;
-    sourceUrl: string;
-    currentTime: string;
-    isPlaying: "true" | "false" | string;
-    playbackSpeed: string;
+    media_id: string;
+    media_type: RedisPlaybackMediaType | string;
+    source_url: string;
+    current_time: string;
+    is_playing: "true" | "false" | string;
+    playback_speed: string;
     volume: string;
-    updatedBy: string;
-    updatedAt: string;
+    updated_by: string;
+    updated_at: string;
 }
 
 /**
- * Deserialized / typed playback state representation for application logic and Socket.io broadcasts
+ * Deserialized / typed playback state representation for application logic and Socket.io broadcasts (camelCase)
  */
 export interface RedisPlaybackState {
     mediaId: number | string;

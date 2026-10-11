@@ -1,4 +1,4 @@
-import type { InterfaceBase } from "./InterfaceBase";
+import type { InterfaceBase, InterfaceBaseRaw } from "./InterfaceBase";
 
 export type RoomStatus = "active" | "ended";
 export type RoomMediaType = "none" | "youtube" | "local_file";
@@ -35,8 +35,7 @@ export interface RoomDetailDTO extends RoomSafeDTO {
     participantCount?: number;
 }
 
-export interface RoomRawInterface {
-    readonly id: number;
+export interface RoomRawInterface extends InterfaceBaseRaw {
     room_code: string;
     title: string;
     description: string;
@@ -45,9 +44,8 @@ export interface RoomRawInterface {
     media_type: RoomMediaType;
     current_media_id: number;
     is_private: boolean | number;
-    passcode_hash: string;
+    passcode: string;
+    passcode_hash?: string;
     max_participants: number;
-    readonly created_at: Date;
-    readonly updated_at: Date;
     ended_at: Date;
 }
