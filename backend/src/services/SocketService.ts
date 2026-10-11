@@ -24,8 +24,14 @@ export default class SocketService {
 
         this.io.use(async (socket, next) => {
             try {
+                let token: string;
                 const authorization = socket.handshake.headers?.authorization;
-                const token = authorization.split("Bearer ")[1];
+                if (authorization && authorization.includes("Bearer ")) {
+                    token = authorization.split("Bearer ")[1];
+                } else if (socket.handshake.auth?.token) {
+                    const authToken = socket.handshake.auth.token;
+                    token = typeof authToken === "string" && authToken.includes("Bearer ") ? authToken.split("Bearer ")[1] : authToken;
+                }
 
                 if (token) {
                     const payload = await server.JWT.verifyAccessToken(token);

@@ -96,7 +96,7 @@ export default class ChatSocket {
             }
 
             const senderId = userId;
-            const senderName = participant.displayName || socket.data?.user?.displayName || socket.data?.user?.username || `User ${senderId}`;
+            const senderName = participant.displayName || socket.data?.user?.displayName || socket.data?.user?.username || "";
             const avatarUrl = participant.avatarUrl || socket.data?.user?.avatarUrl || Gravatar.getDefaultAvatarURL();
 
             this.server.log("Socket:Chat", `Chat message in ${roomKey} from ${senderName} (${senderId}): ${data.message}`);

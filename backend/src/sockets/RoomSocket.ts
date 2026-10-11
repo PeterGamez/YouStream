@@ -59,7 +59,18 @@ export default class RoomSocket {
             }
 
             // 3. Resolve user identity and role
-            const userId = socket.data?.userId || socket.data?.user?.id;
+            const session = await RoomStateService.getSocketSession(socket.id);
+            const userId = socket.data?.userId || socket.data?.user?.id || session?.userId;
+
+            if (!userId) {
+                const errorPayload: SocketErrorPayload = {
+                    code: "UNAUTHORIZED",
+                    message: "Authentication required to join the room",
+                };
+                socket.emit("error", errorPayload);
+                return;
+            }
+
             const isAdmin = socket.data?.user?.role === "admin";
             const isHost = room.hostId === userId || isAdmin;
 
@@ -107,7 +118,7 @@ export default class RoomSocket {
             await RoomStateService.addActiveRoom(roomId);
 
             const role: RedisParticipantRole = isHost ? "host" : "viewer";
-            const displayName = socket.data?.user?.displayName || socket.data?.user?.username || (role === "host" ? "Host" : `Viewer ${userId}`);
+            const displayName = socket.data?.user?.displayName || socket.data?.user?.username || "";
             const avatarUrl = socket.data?.user?.avatarUrl || Gravatar.getDefaultAvatarURL();
 
             await RoomStateService.addParticipant(roomId, {
@@ -139,7 +150,7 @@ export default class RoomSocket {
                     maxParticipants: room.maxParticipants,
                 },
                 playbackState: playbackState || {
-                    mediaId: null,
+                    mediaId: room.currentMediaId ?? null,
                     mediaType: room.mediaType || "none",
                     sourceUrl: "",
                     currentTime: 0,
@@ -166,6 +177,7 @@ export default class RoomSocket {
 
             const session = await RoomStateService.getSocketSession(socket.id);
             const userId = session?.userId || socket.data?.userId || socket.data?.user?.id;
+            const participant = userId ? await RoomStateService.getParticipant(data.roomId, userId) : null;
             if (userId) {
                 await RoomStateService.removeParticipant(data.roomId, userId);
             }
@@ -175,7 +187,7 @@ export default class RoomSocket {
 
             this.io.to(roomKey).emit("room:user-left", {
                 userId: userId,
-                displayName: socket.data?.user?.displayName || "ViewerName",
+                displayName: participant?.displayName || socket.data?.user?.displayName || socket.data?.user?.username || "",
             });
         });
 

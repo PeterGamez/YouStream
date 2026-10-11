@@ -35,9 +35,9 @@ export default class VideoSocket {
             this.server.log("Socket:Video", `Video changed in ${roomKey} by host ${authCheck.userId}: ${data.sourceType}`);
 
             await RoomStateService.setPlaybackState(data.roomId, {
-                mediaId: (data as any).mediaId ?? 1,
+                mediaId: data.mediaId ?? null,
                 mediaType: data.sourceType,
-                sourceUrl: data.sourceType === "youtube" ? data.youtubeId : data.fileUrl,
+                sourceUrl: (data.sourceType === "youtube" ? data.youtubeId : data.fileUrl) || "",
                 currentTime: 0,
                 isPlaying: false,
                 playbackSpeed: 1,
@@ -47,11 +47,11 @@ export default class VideoSocket {
             });
 
             this.io.to(roomKey).emit("video:update", {
-                mediaId: (data as any).mediaId ?? 1,
+                mediaId: data.mediaId ?? null,
                 sourceType: data.sourceType,
                 youtubeId: data.youtubeId,
                 fileUrl: data.fileUrl,
-                title: data.title || "Selected Video",
+                title: data.title || "",
             });
         });
 

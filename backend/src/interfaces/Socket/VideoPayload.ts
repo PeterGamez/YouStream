@@ -4,6 +4,7 @@ export interface VideoChangePayload {
     youtubeId?: string;
     fileUrl?: string;
     title?: string;
+    mediaId?: number;
 }
 
 export interface VideoUpdatePayload {
