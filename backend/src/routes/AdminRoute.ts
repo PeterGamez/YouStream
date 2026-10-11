@@ -5,11 +5,13 @@ import { Hono } from "hono";
 import type { BlankEnv, BlankSchema } from "hono/types";
 
 import type Server from "../Server";
+import type { UserInterface } from "../interfaces/Database";
 import type { RouteInterface } from "../interfaces/Route";
 import MediaModel from "../models/MediaModel";
 import RoomModel from "../models/RoomModel";
 import UserModel from "../models/UserModel";
 import RoomStateService from "../services/RoomStateService";
+import UserService from "../services/UserService";
 import RoomSocket from "../sockets/RoomSocket";
 
 export default class AdminRoute implements RouteInterface {
@@ -89,7 +91,7 @@ export default class AdminRoute implements RouteInterface {
                     return c.json({ error: "Invalid user ID" }, 400);
                 }
 
-                let body: any;
+                let body: { role: UserInterface["role"] };
                 try {
                     body = await c.req.json();
                 } catch {
@@ -97,7 +99,7 @@ export default class AdminRoute implements RouteInterface {
                 }
 
                 const role = body.role;
-                if (role !== "user" && role !== "Admin Route") {
+                if (role !== "user" && role !== "admin") {
                     return c.json({ error: "Role must be 'user' or 'admin'" }, 400);
                 }
 
@@ -107,6 +109,7 @@ export default class AdminRoute implements RouteInterface {
                 }
 
                 await UserModel.updateUser(id, "role", role);
+                UserService.delUser(id);
 
                 this.server.log("Admin Route", `Updated role for user ${id} to ${role}`);
 
@@ -134,6 +137,7 @@ export default class AdminRoute implements RouteInterface {
                 }
 
                 await UserModel.deleteUser(id);
+                UserService.delUser(id);
 
                 this.server.log("Admin Route", `User ${id} suspended/deleted by admin`);
 

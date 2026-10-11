@@ -23,7 +23,7 @@ export default class AuthRoute implements RouteInterface {
     private registerRoutes() {
         this.app.post("/register", async (c) => {
             try {
-                let body: { username: string; email: string; password: string; displayName?: string };
+                let body: { username: string; email: string; password: string; displayName: string };
                 try {
                     body = await c.req.json();
                 } catch {

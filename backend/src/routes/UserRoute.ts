@@ -79,6 +79,7 @@ export default class UserRoute implements RouteInterface {
                 }
 
                 await UserModel.updateUserFields(user.id, { displayName, avatarUrl });
+                UserService.delUser(user.id);
 
                 this.server.log("User Route", `User updated profile: ${user.id} (${user.username})`);
 
@@ -115,8 +116,9 @@ export default class UserRoute implements RouteInterface {
                     return c.json({ error: "Current password and new password are required" }, 400);
                 }
 
-                if (newPassword.length < 6) {
-                    return c.json({ error: "New password must be at least 6 characters long" }, 400);
+                const isValidPassword = await this.server.Password.verify(currentPassword, user.password);
+                if (!isValidPassword) {
+                    return c.json({ error: "Current password is incorrect" }, 401);
                 }
 
                 await UserModel.updateUser(user.id, "password", newPassword);

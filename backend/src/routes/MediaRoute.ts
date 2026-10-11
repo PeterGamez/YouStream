@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import type { BlankEnv, BlankSchema } from "hono/types";
 
 import type Server from "../Server";
-import type { MediaSourceType } from "../interfaces/Database";
+import type { MediaInterface, MediaSourceType } from "../interfaces/Database";
 import type { RouteInterface } from "../interfaces/Route";
 import MediaModel from "../models/MediaModel";
 
@@ -215,7 +215,7 @@ export default class MediaRoute implements RouteInterface {
             try {
                 const sourceType = c.req.query("sourceType") as MediaSourceType;
 
-                let mediaList = [];
+                let mediaList: MediaInterface[] = [];
                 if (sourceType && (sourceType === "youtube" || sourceType === "local_file")) {
                     mediaList = await MediaModel.selectMediaBySourceType(sourceType);
                 } else {
@@ -241,7 +241,7 @@ export default class MediaRoute implements RouteInterface {
                     return c.json({ error: "Media not found" }, 404);
                 }
 
-                return c.json({ media });
+                return c.json(media);
             } catch (error: any) {
                 this.server.error("Media Route", `Get /media/:id error: ${error?.message || error}`);
                 return c.json({ error: "Failed to retrieve media details" }, 500);
