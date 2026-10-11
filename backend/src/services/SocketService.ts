@@ -3,9 +3,9 @@ import type { Socket } from "socket.io";
 import { Server as IOServer } from "socket.io";
 
 import type Server from "../Server";
+import ChatSocket from "../sockets/ChatSocket";
 import RoomSocket from "../sockets/RoomSocket";
 import VideoSocket from "../sockets/VideoSocket";
-import ChatSocket from "../sockets/ChatSocket";
 
 export default class SocketService {
     public static io: IOServer;

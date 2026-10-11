@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "build": "tsup",
+    "tsc": "tsc --noEmit",
     "test": "bun run build && bun run dist/index.js --development",
     "lint": "eslint 'src/**/*.ts' --fix",
     "format": "prettier --write 'src/**/*.ts' --config .prettierrc.ts"

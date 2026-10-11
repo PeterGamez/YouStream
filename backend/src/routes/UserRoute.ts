@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import type { BlankEnv, BlankSchema } from "hono/types";
 
 import type Server from "../Server";
+import type { UserSafeDTO } from "../interfaces/Database";
 import type { RouteInterface } from "../interfaces/Route";
+import UserModel from "../models/UserModel";
+import UserService from "../services/UserService";
 
 export default class UserRoute implements RouteInterface {
     private readonly basePath = "/users";
@@ -20,56 +23,133 @@ export default class UserRoute implements RouteInterface {
         this.app.use("*", this.server.Middleware.auth());
 
         this.app.get("/me", async (c) => {
-            return c.json({
-                user: {
-                    id: 1,
-                    username: "user",
-                    email: "user@example.com",
-                    displayName: "User Display Name",
-                    avatarUrl: "https://www.gravatar.com/avatar/?d=mp",
-                    role: "user",
-                    createdAt: new Date().toISOString(),
-                },
-            });
+            try {
+                const user = await this.server.Middleware.getUser(c);
+                if (!user) {
+                    return c.json({ error: "User not found" }, 404);
+                }
+
+                const userDTO: UserSafeDTO = {
+                    id: user.id,
+                    username: user.username,
+                    email: user.email,
+                    displayName: user.displayName,
+                    avatarUrl: user.avatarUrl,
+                    role: user.role,
+                };
+
+                return c.json(userDTO);
+            } catch (error: any) {
+                this.server.error("USER", `Get /me error: ${error?.message || error}`);
+                return c.json({ error: "Failed to retrieve user profile" }, 500);
+            }
         });
 
         this.app.patch("/me", async (c) => {
-            return c.json({
-                message: "Profile updated successfully",
-                user: {
-                    id: 1,
-                    username: "user",
-                    email: "user@example.com",
-                    displayName: "Updated Name",
-                    avatarUrl: "https://www.gravatar.com/avatar/?d=mp",
-                    role: "user",
-                },
-            });
+            try {
+                const user = await this.server.Middleware.getUser(c);
+                if (!user) {
+                    return c.json({ error: "User not found" }, 404);
+                }
+
+                let body: { displayName?: string; avatarUrl?: string };
+                try {
+                    body = await c.req.json();
+                } catch {
+                    return c.json({ error: "Invalid or missing JSON body" }, 400);
+                }
+
+                const { displayName, avatarUrl } = body;
+
+                if (displayName === undefined && avatarUrl === undefined) {
+                    return c.json({ error: "At least one field (displayName, avatarUrl) is required to update" }, 400);
+                }
+
+                if (displayName !== undefined) {
+                    if (typeof displayName !== "string" || displayName.trim().length === 0) {
+                        return c.json({ error: "Display name cannot be empty" }, 400);
+                    }
+                    if (displayName.trim().length > 100) {
+                        return c.json({ error: "Display name cannot exceed 100 characters" }, 400);
+                    }
+                }
+
+                if (avatarUrl !== undefined && typeof avatarUrl !== "string") {
+                    return c.json({ error: "Invalid avatar URL" }, 400);
+                }
+
+                await UserModel.updateUserFields(user.id, { displayName, avatarUrl });
+
+                this.server.log("USER", `User updated profile: ${user.id} (${user.username})`);
+
+                return c.json({
+                    message: "Profile updated successfully",
+                });
+            } catch (error: any) {
+                if (error?.message === "Email already in use") {
+                    return c.json({ error: "Email already in use" }, 409);
+                }
+                this.server.error("USER", `Update profile error: ${error?.message || error}`);
+                return c.json({ error: "Failed to update profile" }, 500);
+            }
         });
 
         this.app.patch("/me/password", async (c) => {
-            return c.json({
-                message: "Password updated successfully",
-            });
+            try {
+                const user = await this.server.Middleware.getUser(c);
+                if (!user) {
+                    return c.json({ error: "User not found" }, 404);
+                }
+
+                let body: { currentPassword?: string; oldPassword?: string; newPassword?: string };
+                try {
+                    body = await c.req.json();
+                } catch {
+                    return c.json({ error: "Invalid or missing JSON body" }, 400);
+                }
+
+                const currentPassword = (body.currentPassword || body.oldPassword)?.trim();
+                const newPassword = body.newPassword?.trim();
+
+                if (!currentPassword || !newPassword) {
+                    return c.json({ error: "Current password and new password are required" }, 400);
+                }
+
+                if (newPassword.length < 6) {
+                    return c.json({ error: "New password must be at least 6 characters long" }, 400);
+                }
+
+                await UserModel.updateUser(user.id, "password", newPassword);
+
+                this.server.log("USER", `User changed password: ${user.id} (${user.username})`);
+
+                return c.json({
+                    message: "Password updated successfully",
+                });
+            } catch (error: any) {
+                if (error?.message === "Current password is incorrect") {
+                    return c.json({ error: "Current password is incorrect" }, 400);
+                }
+                this.server.error("USER", `Password change error: ${error?.message || error}`);
+                return c.json({ error: "Failed to update password" }, 500);
+            }
         });
 
         this.app.post("/logout", async (c) => {
-            return c.json({
-                message: "Logged out successfully",
-            });
-        });
+            try {
+                const payload = c.get("jwtPayload");
+                if (payload?.userId) {
+                    await UserService.delUser(payload.userId);
+                    this.server.log("USER", `User logged out: ${payload.userId}`);
+                }
 
-        this.app.get("/:id", async (c) => {
-            const id = c.req.param("id");
-            return c.json({
-                user: {
-                    id: Number(id),
-                    username: "user",
-                    displayName: "User Display Name",
-                    avatarUrl: "https://www.gravatar.com/avatar/?d=mp",
-                    role: "user",
-                },
-            });
+                return c.json({
+                    message: "Logged out successfully",
+                });
+            } catch (error: any) {
+                this.server.error("USER", `Logout error: ${error?.message || error}`);
+                return c.json({ error: "Failed to log out" }, 500);
+            }
         });
     }
 

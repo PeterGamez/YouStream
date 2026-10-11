@@ -5,7 +5,7 @@ export interface ChatSendPayload {
 
 export interface ChatMessagePayload {
     id: string;
-    senderId: number | null;
+    senderId: number;
     senderName: string;
     avatarUrl?: string;
     message: string;

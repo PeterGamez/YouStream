@@ -23,18 +23,19 @@ export default class AuthRoute implements RouteInterface {
     private registerRoutes() {
         this.app.post("/register", async (c) => {
             try {
-                let body: { username: string; email: string; password: string };
+                let body: { username: string; email: string; password: string; displayName?: string };
                 try {
                     body = await c.req.json();
                 } catch {
                     return c.json({ error: "Invalid or missing JSON body" }, 400);
                 }
 
-                let { username, email, password } = body;
+                let { username, email, password, displayName } = body;
 
                 username = username?.trim()?.toLowerCase();
                 email = email?.trim()?.toLowerCase();
                 password = password?.trim();
+                displayName = displayName?.trim();
 
                 if (!username || !email || !password) {
                     return c.json({ error: "Missing required fields" }, 400);
@@ -48,12 +49,14 @@ export default class AuthRoute implements RouteInterface {
                     return c.json({ error: "Invalid email address" }, 400);
                 }
 
-                const [existingUser, hashedPassword] = await Promise.all([UserModel.selectUserExistsByUsernameOrEmail(username, email), this.server.Password.hash(password)]);
+                const existingUser = await UserModel.selectUserExistsByUsernameOrEmail(username, email);
                 if (existingUser) {
                     return c.json({ error: "Username or email already exists" }, 409);
                 }
 
-                await UserModel.createUser(username, email, hashedPassword);
+                const hashedPassword = await this.server.Password.hash(password);
+
+                await UserModel.createUser(username, email, hashedPassword, displayName);
 
                 this.server.log("AUTH", `User registered: ${email}`);
 

@@ -1,8 +1,8 @@
-import { Context } from "hono";
+import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 
 import type Server from "../Server";
-import { UserInterface } from "../interfaces/Database";
+import type { UserInterface } from "../interfaces/Database";
 import UserService from "../services/UserService";
 
 export default class Middleware {
@@ -55,10 +55,15 @@ export default class Middleware {
         }
 
         const payload = c.get("jwtPayload");
+        if (!payload || !payload.userId) {
+            return null;
+        }
         const { userId } = payload;
 
         const user = await UserService.getUser(userId);
-        c.set("authUser", user);
+        if (user) {
+            c.set("authUser", user);
+        }
         return user;
     }
 }
