@@ -257,7 +257,7 @@ erDiagram
         int id PK "Auto Increment"
         varchar(50) username UK "ชื่อผู้ใช้"
         varchar(255) email UK "อีเมล"
-        varchar(255) password_hash "รหัสผ่านที่เข้ารหัสด้วย bcrypt"
+        varchar(255) password "รหัสผ่านที่เข้ารหัสด้วย bcrypt"
         varchar(100) display_name "ชื่อที่แสดง"
         varchar(500) avatar_url "รูปภาพโปรไฟล์ (ดึงจาก Gravatar)"
         enum role "user / admin"
@@ -275,7 +275,7 @@ erDiagram
         enum media_type "none / youtube / local_file"
         int current_media_id "มีเดียที่กำลังเล่นอยู่"
         boolean is_private "สถานะห้องส่วนตัว"
-        varchar(255) passcode_hash "รหัสผ่านห้อง (ถ้ามี)"
+        varchar(255) passcode "รหัสผ่านห้อง (ถ้ามี)"
         int max_participants "จำนวนผู้ชมสูงสุด"
         datetime created_at "เวลาที่สร้างห้อง"
         datetime updated_at "เวลาที่อัปเดตห้อง"
@@ -343,7 +343,7 @@ erDiagram
 | `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำตัวผู้ใช้ (Auto Increment) |
 | `username` | `VARCHAR(50)` | NO | UNIQUE | ชื่อบัญชีผู้ใช้สำหรับล็อกอินและอ้างอิง |
 | `email` | `VARCHAR(255)` | NO | UNIQUE | อีเมลสำหรับล็อกอินและการติดต่อ |
-| `password_hash` | `VARCHAR(255)` | NO | NOT NULL | รหัสผ่านที่ผ่านการเข้ารหัสด้วย bcrypt |
+| `password` | `VARCHAR(255)` | NO | NOT NULL | รหัสผ่านที่ผ่านการเข้ารหัสด้วย bcrypt |
 | `display_name` | `VARCHAR(100)` | NO | - | ชื่อที่ต้องการให้แสดงในห้องและแชท |
 | `avatar_url` | `VARCHAR(500)` | NO | NOT NULL | URL รูปภาพโปรไฟล์ ดึงจาก [Gravatar](https://gravatar.com/) ผ่าน Email Hash |
 | `role` | `ENUM('user', 'admin')` | NO | DEFAULT `'user'` | สิทธิ์ระดับผู้ใช้งานในระบบ |
@@ -364,7 +364,7 @@ erDiagram
 | `media_type` | `ENUM('none', 'youtube', 'local_file')` | NO | DEFAULT `'none'` | ชนิดของสื่อที่กำลังสตรีมอยู่ขณะนี้ |
 | `current_media_id` | `INT` | YES | NULL | อ้างอิงวิดีโอปัจจุบันที่กำลังเล่น |
 | `is_private` | `BOOLEAN` | NO | DEFAULT `FALSE` | ห้องส่วนตัว (ต้องใส่รหัสผ่านก่อนเข้า) |
-| `passcode_hash` | `VARCHAR(255)` | YES | NULL | รหัสผ่านเข้าห้องที่ผ่านการ Hash (ถ้ามี) |
+| `passcode` | `VARCHAR(255)` | YES | NULL | รหัสผ่านเข้าห้องที่ผ่านการ Hash (ถ้ามี) |
 | `max_participants` | `INT` | NO | DEFAULT `50` | จำนวนผู้ชมสูงสุดที่อนุญาตในห้อง |
 | `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่สร้างห้อง |
 | `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่มีการแก้ไขข้อมูลห้อง |
