@@ -18,10 +18,7 @@ export default class IndexRoute implements RouteInterface {
 
     private registerRoutes() {
         this.app.get("/", (c) => {
-            return c.json({
-                name: "YouStream API Server",
-                status: "running",
-            });
+            return c.json({ message: "Hono + TypeScript Server" });
         });
     }
 
