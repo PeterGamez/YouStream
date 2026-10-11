@@ -23,6 +23,8 @@ export default {
 
         table: {
             user: "user",
+            room: "room",
+            media: "media",
         },
     },
 
