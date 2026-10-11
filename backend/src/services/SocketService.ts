@@ -6,6 +6,7 @@ import type Server from "../Server";
 import ChatSocket from "../sockets/ChatSocket";
 import RoomSocket from "../sockets/RoomSocket";
 import VideoSocket from "../sockets/VideoSocket";
+import UserService from "./UserService";
 
 export default class SocketService {
     public static io: IOServer;
@@ -19,6 +20,27 @@ export default class SocketService {
                 origin: "*",
                 methods: ["GET", "POST"],
             },
+        });
+
+        this.io.use(async (socket, next) => {
+            try {
+                const authorization = socket.handshake.headers?.authorization;
+                const token = authorization.split("Bearer ")[1];
+
+                if (token) {
+                    const payload = await server.JWT.verifyAccessToken(token);
+                    if (payload?.userId) {
+                        const user = await UserService.getUser(payload.userId);
+                        if (user) {
+                            socket.data.user = user;
+                            socket.data.userId = user.id;
+                        }
+                    }
+                }
+            } catch {
+                // allow guest / unauthenticated
+            }
+            next();
         });
 
         RoomSocket.init(this.io, server);
