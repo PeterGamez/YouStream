@@ -59,7 +59,6 @@
 - **Authentication & Security:** 
   - JSON Web Tokens (JWT) สำหรับการยืนยันตัวตนแบบ Stateless
   - Password Hashing: `bcrypt`
-  - OAuth 2.0 (Google Login)
 - **Hosting & Deployment:** 
   - Backend, Redis & Database: OVHcloud / Railway
   - Frontend: Vercel / Railway
@@ -74,9 +73,9 @@
 
 | รหัส (ID) | โมดูล (Module) | รายละเอียดฟังก์ชันการทำงาน (Description) | ลำดับความสำคัญ |
 | :---: | :--- | :--- | :---: |
-| **FR-01** | Authentication | ผู้ใช้สามารถลงทะเบียน (Sign up) เข้าสู่ระบบ (Sign in) ด้วยอีเมลและรหัสผ่าน หรือผ่าน OAuth 2.0 (Google) โดยระบบจะกำหนด Avatar URL ให้อัตโนมัติจาก Google Account หรือดึงจาก [Gravatar](https://gravatar.com/) ผ่านแฮชของอีเมล | High |
+| **FR-01** | Authentication | ผู้ใช้สามารถลงทะเบียน (Sign up) เข้าสู่ระบบ (Sign in) ด้วยอีเมลและรหัสผ่าน โดยระบบจะกำหนด Avatar URL ให้ดึงจาก [Gravatar](https://gravatar.com/) ผ่านแฮชของอีเมล | High |
 | **FR-02** | Authentication | ระบบทำการเข้ารหัสรหัสผ่านด้วย `bcrypt` ก่อนจัดเก็บ และออก JSON Web Token (JWT) สำหรับยืนยันตัวตน | High |
-| **FR-03** | User Profile | ผู้ใช้สามารถดูข้อมูลโปรไฟล์ (Display Name, Avatar URL) และเปลี่ยนรหัสผ่านได้ โดย Avatar URL จะดึงจาก Google Account หรือ Gravatar (https://gravatar.com/) | Medium |
+| **FR-03** | User Profile | ผู้ใช้สามารถดูข้อมูลโปรไฟล์ (Display Name, Avatar URL) และเปลี่ยนรหัสผ่านได้ โดย Avatar URL จะดึงจาก [Gravatar](https://gravatar.com/) | Medium |
 | **FR-04** | Room Directory | หน้ารวมห้อง (Lobby) แสดงรายการห้องที่กำลังเปิดสตรีมอยู่ (Active Rooms) พร้อมชื่อห้อง, ชื่อ Host, ประเภทสื่อที่กำลังเล่น, และจำนวนผู้ชมปัจจุบัน | High |
 | **FR-05** | Room Directory | ผู้ใช้สามารถค้นหาห้องตามชื่อห้อง หรือค้นหาด้วยรหัสห้องตัวเลข 8 หลัก (Room Code) หรือกรองตามสถานะ/ประเภทของสื่อได้ | Medium |
 | **FR-06** | Room Management | สมาชิกสามารถสร้างห้องสตรีมมิ่งใหม่ได้ โดยกำหนดชื่อห้อง รายละเอียด และการตั้งค่าความเป็นส่วนตัว (Public / Passcode Protected) | High |
@@ -133,7 +132,7 @@
 ### 2. ตารางสรุป Use Case สำคัญ
 | Use Case ID | Actor | ชื่อ Use Case | คำอธิบายสั้นๆ (Description) |
 | :---: | :--- | :--- | :--- |
-| **UC-01** | User | Register & Login | สมัครสมาชิกและเข้าสู่ระบบด้วย Email/Password หรือ Google OAuth เพื่อรับ JWT Token |
+| **UC-01** | User | Register & Login | สมัครสมาชิกและเข้าสู่ระบบด้วย Email/Password เพื่อรับ JWT Token |
 | **UC-02** | User | Browse Room Directory | ดูรายการห้องสตรีมทั้งหมดที่เปิดอยู่ ค้นหาห้อง และคลิกเพื่อเข้าร่วมห้อง |
 | **UC-03** | User | Create Stream Room | สร้างห้องสตรีมมิ่งใหม่ กำหนดชื่อ รายละเอียด และรหัสผ่านเข้าห้อง (ถ้ามี) |
 | **UC-04** | Host | Stream YouTube Video | นำลิงก์ YouTube มาใส่ ระบบสกัด Video ID และกระจายให้ผู้ชมทุกคนในห้องเล่นพร้อมกัน |
@@ -260,7 +259,7 @@ erDiagram
         varchar(255) email UK "อีเมล"
         varchar(255) password_hash "รหัสผ่านที่เข้ารหัสด้วย bcrypt"
         varchar(100) display_name "ชื่อที่แสดง"
-        varchar(500) avatar_url "รูปภาพโปรไฟล์ (ดึงจาก Google Account หรือ Gravatar)"
+        varchar(500) avatar_url "รูปภาพโปรไฟล์ (ดึงจาก Gravatar)"
         enum role "user / admin"
         datetime created_at "เวลาที่สร้างบัญชี"
         datetime updated_at "เวลาที่แก้ไขล่าสุด"
@@ -344,9 +343,9 @@ erDiagram
 | `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำตัวผู้ใช้ (Auto Increment) |
 | `username` | `VARCHAR(50)` | NO | UNIQUE | ชื่อบัญชีผู้ใช้สำหรับล็อกอินและอ้างอิง |
 | `email` | `VARCHAR(255)` | NO | UNIQUE | อีเมลสำหรับล็อกอินและการติดต่อ |
-| `password_hash` | `VARCHAR(255)` | YES | NULL (อนุญาต NULL สำหรับ Google OAuth) | รหัสผ่านที่ผ่านการเข้ารหัสด้วย bcrypt |
+| `password_hash` | `VARCHAR(255)` | NO | NOT NULL | รหัสผ่านที่ผ่านการเข้ารหัสด้วย bcrypt |
 | `display_name` | `VARCHAR(100)` | NO | - | ชื่อที่ต้องการให้แสดงในห้องและแชท |
-| `avatar_url` | `VARCHAR(500)` | YES | NULL | URL รูปภาพโปรไฟล์ ดึงจาก Google Account (กรณี Google OAuth) หรือดึงจาก [Gravatar](https://gravatar.com/) ผ่าน Email Hash |
+| `avatar_url` | `VARCHAR(500)` | NO | NOT NULL | URL รูปภาพโปรไฟล์ ดึงจาก [Gravatar](https://gravatar.com/) ผ่าน Email Hash |
 | `role` | `ENUM('user', 'admin')` | NO | DEFAULT `'user'` | สิทธิ์ระดับผู้ใช้งานในระบบ |
 | `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันและเวลาที่สมัครสมาชิก |
 | `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันและเวลาที่อัปเดตข้อมูลล่าสุด |

@@ -110,22 +110,6 @@ export default class AuthRoute implements RouteInterface {
             }
         });
 
-        this.app.post("/google", async (c) => {
-            return c.json({
-                message: "Google authentication successful",
-                accessToken: "access_token_placeholder",
-                refreshToken: "refresh_token_placeholder",
-                user: {
-                    id: 1,
-                    username: "google_user",
-                    email: "user@gmail.com",
-                    displayName: "Google User",
-                    avatarUrl: "https://lh3.googleusercontent.com/a/default",
-                    role: "user",
-                },
-            });
-        });
-
         this.app.post("/refresh", async (c) => {
             try {
                 let body: { refreshToken: string };
