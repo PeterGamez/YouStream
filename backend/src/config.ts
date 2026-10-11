@@ -2,6 +2,8 @@ export default {
     path: process.env.API_PATH || "/",
     port: parseInt(process.env.PORT || "3001"),
 
+    uploadDir: "./uploads",
+
     site: {
         name: process.env.SITE_NAME || "YouStream",
         url: process.env.SITE_URL || "http://localhost:3000",

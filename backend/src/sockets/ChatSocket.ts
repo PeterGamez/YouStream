@@ -1,6 +1,7 @@
 import type { Server as IOServer, Socket } from "socket.io";
 
 import type Server from "../Server";
+import Gravatar from "../integrations/Gravatar";
 import type { ChatMessagePayload, ChatSendPayload, SocketErrorPayload } from "../interfaces/Socket";
 
 export default class ChatSocket {
@@ -31,7 +32,7 @@ export default class ChatSocket {
                 id: `msg_${Date.now()}`,
                 senderId: 1,
                 senderName: "User",
-                avatarUrl: "https://www.gravatar.com/avatar/?d=mp",
+                avatarUrl: Gravatar.getDefaultAvatarURL(),
                 message: data.message,
                 messageType: "chat",
                 createdAt: new Date().toISOString(),

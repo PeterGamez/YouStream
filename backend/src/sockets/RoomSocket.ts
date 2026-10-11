@@ -1,6 +1,7 @@
 import type { Server as IOServer, Socket } from "socket.io";
 
 import type Server from "../Server";
+import Gravatar from "../integrations/Gravatar";
 import type { RoomEndPayload, RoomJoinPayload, RoomLeavePayload } from "../interfaces/Socket";
 
 export default class RoomSocket {
@@ -47,7 +48,7 @@ export default class RoomSocket {
                     {
                         userId: 1,
                         displayName: "HostName",
-                        avatarUrl: "https://www.gravatar.com/avatar/?d=mp",
+                        avatarUrl: Gravatar.getDefaultAvatarURL(),
                         role: "host",
                         socketId: socket.id,
                         joinedAt: new Date().toISOString(),

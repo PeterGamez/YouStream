@@ -58,11 +58,11 @@ export default class AuthRoute implements RouteInterface {
 
                 await UserModel.createUser(username, email, hashedPassword, displayName);
 
-                this.server.log("AUTH", `User registered: ${email}`);
+                this.server.log("Auth Route", `User registered: ${email}`);
 
                 return c.json({ message: "Registration successful." }, 201);
             } catch (error) {
-                this.server.error("AUTH", "Registration error: ");
+                this.server.error("Auth Route", "Registration error: ");
                 console.error(error);
                 return c.json({ error: "Registration failed" }, 500);
             }
@@ -99,7 +99,7 @@ export default class AuthRoute implements RouteInterface {
                 const accessToken = await this.server.JWT.generateAccessToken(user);
                 const refreshToken = await this.server.JWT.generateRefreshToken(user);
 
-                this.server.log("AUTH", `User logged in: ${user.id} | ${user.username} | ${user.email}`);
+                this.server.log("Auth Route", `User logged in: ${user.id} | ${user.username} | ${user.email}`);
 
                 return c.json({
                     message: "Login successful",
@@ -107,7 +107,7 @@ export default class AuthRoute implements RouteInterface {
                     refreshToken,
                 });
             } catch (error) {
-                this.server.error("AUTH", "Login error: ");
+                this.server.error("Auth Route", "Login error: ");
                 console.error(error);
                 return c.json({ error: "Login failed" }, 500);
             }
@@ -141,14 +141,14 @@ export default class AuthRoute implements RouteInterface {
                 const newAccessToken = await this.server.JWT.generateAccessToken(user);
                 const newRefreshToken = await this.server.JWT.generateRefreshToken(user);
 
-                this.server.log("AUTH", `Tokens refreshed for: ${user.id}`);
+                this.server.log("Auth Route", `Tokens refreshed for: ${user.id}`);
 
                 return c.json({
                     accessToken: newAccessToken,
                     refreshToken: newRefreshToken,
                 });
             } catch (error) {
-                this.server.error("AUTH", "Token refresh error: ");
+                this.server.error("Auth Route", "Token refresh error: ");
                 console.error(error);
                 return c.json({ error: "Invalid or expired refresh token" }, 401);
             }
