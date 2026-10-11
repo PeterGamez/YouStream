@@ -1,10 +1,14 @@
 import type Redis from "ioredis";
 
+import RoomStateService from "./RoomStateService";
+
 export default class RedisService {
     public static Redis: Redis;
 
     public static init(Redis: Redis) {
         this.Redis = Redis;
+
+        RoomStateService.init(Redis);
     }
 
     public static async get<T extends string>(key: string): Promise<T> {
@@ -23,5 +27,10 @@ export default class RedisService {
 
     public static async expire(key: string, seconds: number) {
         return await this.Redis.expire(key, seconds);
+    }
+
+    public static async sismember(key: string, member: string): Promise<boolean> {
+        const result = await this.Redis.sismember(key, member);
+        return result === 1;
     }
 }
