@@ -169,7 +169,7 @@ export default class MediaRoute implements RouteInterface {
                     return c.json({ error: "Unauthorized" }, 401);
                 }
 
-                let body: any;
+                let body: { url?: string; sourceUrl?: string; title?: string };
                 try {
                     body = await c.req.json();
                 } catch {

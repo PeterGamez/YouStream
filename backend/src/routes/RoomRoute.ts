@@ -5,6 +5,7 @@ import type Server from "../Server";
 import Gravatar from "../integrations/Gravatar";
 import type { RoomMediaType, RoomSafeDTO } from "../interfaces/Database";
 import type { RouteInterface } from "../interfaces/Route";
+import type { RoomType } from "../interfaces/Type";
 import RoomModel from "../models/RoomModel";
 import UserModel from "../models/UserModel";
 import RoomStateService from "../services/RoomStateService";
@@ -117,7 +118,14 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Unauthorized" }, 401);
                 }
 
-                let body: any;
+                let body: {
+                    title?: string;
+                    description?: string;
+                    isPrivate?: boolean;
+                    maxParticipants?: number;
+                    mediaType?: RoomMediaType;
+                    passcode?: string;
+                };
                 try {
                     body = await c.req.json();
                 } catch {
@@ -134,10 +142,10 @@ export default class RoomRoute implements RouteInterface {
 
                 const description = body.description?.trim() || "";
                 const isPrivate = Boolean(body.isPrivate);
-                const maxParticipants = typeof body.maxParticipants === "number" && body.maxParticipants > 0 ? body.maxParticipants : 50;
+                const maxParticipants = body.maxParticipants ?? 100;
                 const mediaType: RoomMediaType = body.mediaType || "none";
 
-                let passcodeHash: string | null = null;
+                let passcodeHash: string = null;
                 if (isPrivate) {
                     const passcode = body.passcode?.trim();
                     if (!passcode || passcode.length < 4) {
@@ -336,7 +344,7 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ verified: true, roomId: room.id });
                 }
 
-                let body: any;
+                let body: { passcode?: string };
                 try {
                     body = await c.req.json();
                 } catch {
@@ -381,14 +389,20 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Forbidden: Only the room host can update room details" }, 403);
                 }
 
-                let body: any;
+                let body: {
+                    title?: string;
+                    description?: string;
+                    maxParticipants?: number;
+                    isPrivate?: boolean;
+                    passcode?: string;
+                };
                 try {
                     body = await c.req.json();
                 } catch {
                     return c.json({ error: "Invalid or missing JSON body" }, 400);
                 }
 
-                const fieldsToUpdate: any = {};
+                const fieldsToUpdate: Partial<RoomType> = {};
 
                 if (body.title !== undefined) {
                     const trimmedTitle = body.title?.trim();
@@ -403,11 +417,7 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 if (body.maxParticipants !== undefined) {
-                    const maxP = parseInt(body.maxParticipants, 10);
-                    if (isNaN(maxP) || maxP <= 0) {
-                        return c.json({ error: "maxParticipants must be a positive number" }, 400);
-                    }
-                    fieldsToUpdate.maxParticipants = maxP;
+                    fieldsToUpdate.maxParticipants = body.maxParticipants;
                 }
 
                 if (body.isPrivate !== undefined) {

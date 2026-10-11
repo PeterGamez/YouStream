@@ -66,16 +66,12 @@ export default class UserRoute implements RouteInterface {
                 }
 
                 if (displayName !== undefined) {
-                    if (typeof displayName !== "string" || displayName.trim().length === 0) {
+                    if (displayName.trim().length === 0) {
                         return c.json({ error: "Display name cannot be empty" }, 400);
                     }
                     if (displayName.trim().length > 100) {
                         return c.json({ error: "Display name cannot exceed 100 characters" }, 400);
                     }
-                }
-
-                if (avatarUrl !== undefined && typeof avatarUrl !== "string") {
-                    return c.json({ error: "Invalid avatar URL" }, 400);
                 }
 
                 await UserModel.updateUserFields(user.id, { displayName, avatarUrl });

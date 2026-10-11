@@ -17,11 +17,11 @@ export default class MediaModel {
         sourceType: MediaSourceType,
         title: string,
         sourceUrl: string,
-        youtubeVideoId?: string | null,
-        filePath?: string | null,
-        fileSizeBytes?: number | null,
-        mimeType?: string | null,
-        durationSeconds?: number | null
+        youtubeVideoId: string,
+        filePath: string,
+        fileSizeBytes: number,
+        mimeType: string,
+        durationSeconds: number
     ): Promise<number> {
         const connection = await this.DB.getConnection();
         try {

@@ -16,12 +16,12 @@ export default class RoomModel {
         roomCode: string,
         title: string,
         hostId: number,
-        description?: string,
-        isPrivate?: boolean,
-        passcode?: string | null,
-        maxParticipants?: number,
-        mediaType?: RoomMediaType,
-        currentMediaId?: number | null
+        description: string,
+        isPrivate: boolean,
+        passcode: string,
+        maxParticipants: number,
+        mediaType: RoomMediaType,
+        currentMediaId?: number
     ): Promise<number> {
         const connection = await this.DB.getConnection();
         try {
