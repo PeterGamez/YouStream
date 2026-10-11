@@ -1,12 +1,14 @@
 import type { InterfaceBase } from "./InterfaceBase";
 
+export type UserRole = "user" | "admin";
+
 export interface UserInterface extends InterfaceBase {
     username: string;
     email: string;
     password: string;
     displayName: string;
     avatarUrl: string;
-    role: "user" | "admin";
+    role: UserRole;
 }
 
 export type UserSafeDTO = {
