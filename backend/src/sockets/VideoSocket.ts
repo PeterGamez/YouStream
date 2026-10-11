@@ -13,10 +13,6 @@ export default class VideoSocket {
     }
 
     public static register(socket: Socket): void {
-        this.registerVideoEvents(socket);
-    }
-
-    private static registerVideoEvents(socket: Socket): void {
         socket.on("video:change", (data: VideoChangePayload) => {
             const roomKey = `room:${data.roomId}`;
             this.server.log("Socket:Video", `Video changed in ${roomKey}: ${data.sourceType}`);

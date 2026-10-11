@@ -13,19 +13,6 @@ export default class RoomSocket {
     }
 
     public static register(socket: Socket): void {
-        this.registerRoomEvents(socket);
-    }
-
-    public static endRoom(roomId: number | string, reason?: string): void {
-        const roomKey = `room:${roomId}`;
-        this.server.log("Socket:Room", `Room ended: ${roomKey}`);
-        this.io.to(roomKey).emit("room:ended", {
-            roomId: Number(roomId),
-            reason: reason || "Room has been ended by the host",
-        });
-    }
-
-    private static registerRoomEvents(socket: Socket): void {
         socket.on("room:join", (data: RoomJoinPayload) => {
             const roomKey = `room:${data.roomId}`;
             socket.join(roomKey);
@@ -94,6 +81,15 @@ export default class RoomSocket {
 
         socket.on("disconnect", () => {
             this.server.log("Socket:Room", `Client disconnected: ${socket.id}`);
+        });
+    }
+
+    public static endRoom(roomId: number | string, reason?: string): void {
+        const roomKey = `room:${roomId}`;
+        this.server.log("Socket:Room", `Room ended: ${roomKey}`);
+        this.io.to(roomKey).emit("room:ended", {
+            roomId: Number(roomId),
+            reason: reason || "Room has been ended by the host",
         });
     }
 }

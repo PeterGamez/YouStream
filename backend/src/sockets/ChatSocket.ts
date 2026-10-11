@@ -13,10 +13,6 @@ export default class ChatSocket {
     }
 
     public static register(socket: Socket): void {
-        this.registerChatEvents(socket);
-    }
-
-    private static registerChatEvents(socket: Socket): void {
         socket.on("chat:send", (data: ChatSendPayload) => {
             const roomKey = `room:${data.roomId}`;
 
