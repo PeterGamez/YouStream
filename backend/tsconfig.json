@@ -9,11 +9,6 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "types": [
-      "bun"
-    ],
-    /* Path Aliases */
-    "paths": {},
     /* Emit & Project Structure */
     "rootDir": "./src",
     "outDir": "./dist",

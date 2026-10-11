@@ -59,7 +59,6 @@
 - **Authentication & Security:** 
   - JSON Web Tokens (JWT) สำหรับการยืนยันตัวตนแบบ Stateless
   - Password Hashing: `bcrypt`
-  - OAuth 2.0 (Google Login)
 - **Hosting & Deployment:** 
   - Backend, Redis & Database: OVHcloud / Railway
   - Frontend: Vercel / Railway
@@ -74,9 +73,9 @@
 
 | รหัส (ID) | โมดูล (Module) | รายละเอียดฟังก์ชันการทำงาน (Description) | ลำดับความสำคัญ |
 | :---: | :--- | :--- | :---: |
-| **FR-01** | Authentication | ผู้ใช้สามารถลงทะเบียน (Sign up) เข้าสู่ระบบ (Sign in) ด้วยอีเมลและรหัสผ่าน หรือผ่าน OAuth 2.0 (Google) โดยระบบจะกำหนด Avatar URL ให้อัตโนมัติจาก Google Account หรือดึงจาก [Gravatar](https://gravatar.com/) ผ่านแฮชของอีเมล | High |
+| **FR-01** | Authentication | ผู้ใช้สามารถลงทะเบียน (Sign up) เข้าสู่ระบบ (Sign in) ด้วยอีเมลและรหัสผ่าน โดยระบบจะกำหนด Avatar URL ให้ดึงจาก [Gravatar](https://gravatar.com/) ผ่านแฮชของอีเมล | High |
 | **FR-02** | Authentication | ระบบทำการเข้ารหัสรหัสผ่านด้วย `bcrypt` ก่อนจัดเก็บ และออก JSON Web Token (JWT) สำหรับยืนยันตัวตน | High |
-| **FR-03** | User Profile | ผู้ใช้สามารถดูข้อมูลโปรไฟล์ (Display Name, Avatar URL) และเปลี่ยนรหัสผ่านได้ โดย Avatar URL จะดึงจาก Google Account หรือ Gravatar (https://gravatar.com/) | Medium |
+| **FR-03** | User Profile | ผู้ใช้สามารถดูข้อมูลโปรไฟล์ (Display Name, Avatar URL) และเปลี่ยนรหัสผ่านได้ โดย Avatar URL จะดึงจาก [Gravatar](https://gravatar.com/) | Medium |
 | **FR-04** | Room Directory | หน้ารวมห้อง (Lobby) แสดงรายการห้องที่กำลังเปิดสตรีมอยู่ (Active Rooms) พร้อมชื่อห้อง, ชื่อ Host, ประเภทสื่อที่กำลังเล่น, และจำนวนผู้ชมปัจจุบัน | High |
 | **FR-05** | Room Directory | ผู้ใช้สามารถค้นหาห้องตามชื่อห้อง หรือค้นหาด้วยรหัสห้องตัวเลข 8 หลัก (Room Code) หรือกรองตามสถานะ/ประเภทของสื่อได้ | Medium |
 | **FR-06** | Room Management | สมาชิกสามารถสร้างห้องสตรีมมิ่งใหม่ได้ โดยกำหนดชื่อห้อง รายละเอียด และการตั้งค่าความเป็นส่วนตัว (Public / Passcode Protected) | High |
@@ -133,7 +132,7 @@
 ### 2. ตารางสรุป Use Case สำคัญ
 | Use Case ID | Actor | ชื่อ Use Case | คำอธิบายสั้นๆ (Description) |
 | :---: | :--- | :--- | :--- |
-| **UC-01** | User | Register & Login | สมัครสมาชิกและเข้าสู่ระบบด้วย Email/Password หรือ Google OAuth เพื่อรับ JWT Token |
+| **UC-01** | User | Register & Login | สมัครสมาชิกและเข้าสู่ระบบด้วย Email/Password เพื่อรับ JWT Token |
 | **UC-02** | User | Browse Room Directory | ดูรายการห้องสตรีมทั้งหมดที่เปิดอยู่ ค้นหาห้อง และคลิกเพื่อเข้าร่วมห้อง |
 | **UC-03** | User | Create Stream Room | สร้างห้องสตรีมมิ่งใหม่ กำหนดชื่อ รายละเอียด และรหัสผ่านเข้าห้อง (ถ้ามี) |
 | **UC-04** | Host | Stream YouTube Video | นำลิงก์ YouTube มาใส่ ระบบสกัด Video ID และกระจายให้ผู้ชมทุกคนในห้องเล่นพร้อมกัน |
@@ -161,10 +160,10 @@ sequenceDiagram
 
     Host->>FE_Host: วางลิงก์ YouTube
     FE_Host->>FE_Host: สกัด Video ID จาก URL
-    FE_Host->>BE: Socket Emit ('media:change', { type: 'youtube', videoId })
+    FE_Host->>BE: Socket Emit ('video:change', { type: 'youtube', videoId })
     BE->>Redis: แคช Current Media & Playback State บน Redis
-    BE-->>FE_Host: Broadcast ('media:update', data)
-    BE-->>FE_Viewer: Broadcast ('media:update', data)
+    BE-->>FE_Host: Broadcast ('video:update', data)
+    BE-->>FE_Viewer: Broadcast ('video:update', data)
     Note over FE_Host, FE_Viewer: เครื่องเล่น YouTube IFrame API โหลด Video ID เดียวกัน
     Host->>FE_Host: สั่ง Play / Pause / Seek
     FE_Host->>BE: Socket Emit ('video:control', { action, currentTime, speed })
@@ -192,9 +191,9 @@ sequenceDiagram
     Note over BE: ตรวจสอบ MIME type, ตรวจสอบขนาด <= 500MB, บันทึกลง Storage
     BE->>MariaDB: บันทึกข้อมูลมีเดียลงตาราง media
     BE-->>FE_Host: HTTP Response 201 Created { fileUrl, mediaId, title }
-    FE_Host->>Socket: Socket Emit ('media:change', { type: 'local_file', url: fileUrl })
+    FE_Host->>Socket: Socket Emit ('video:change', { type: 'local_file', url: fileUrl })
     Socket->>Redis: บันทึก Current Media & Playback State ลง Redis
-    Socket-->>FE_Viewer: Broadcast ('media:update', { type: 'local_file', url: fileUrl })
+    Socket-->>FE_Viewer: Broadcast ('video:update', { type: 'local_file', url: fileUrl })
     Note over FE_Host, FE_Viewer: แท็ก <video> ของทุกคนโหลดไฟล์สตรีมจาก fileUrl
     Host->>FE_Host: สั่ง Play / Pause / Seek / Speed
     FE_Host->>Socket: Socket Emit ('video:control', { action, currentTime, speed })
@@ -258,9 +257,9 @@ erDiagram
         int id PK "Auto Increment"
         varchar(50) username UK "ชื่อผู้ใช้"
         varchar(255) email UK "อีเมล"
-        varchar(255) password_hash "รหัสผ่านที่เข้ารหัสด้วย bcrypt"
+        varchar(255) password "รหัสผ่านที่เข้ารหัสด้วย bcrypt"
         varchar(100) display_name "ชื่อที่แสดง"
-        varchar(500) avatar_url "รูปภาพโปรไฟล์ (ดึงจาก Google Account หรือ Gravatar)"
+        varchar(500) avatar_url "รูปภาพโปรไฟล์ (ดึงจาก Gravatar)"
         enum role "user / admin"
         datetime created_at "เวลาที่สร้างบัญชี"
         datetime updated_at "เวลาที่แก้ไขล่าสุด"
@@ -276,7 +275,7 @@ erDiagram
         enum media_type "none / youtube / local_file"
         int current_media_id "มีเดียที่กำลังเล่นอยู่"
         boolean is_private "สถานะห้องส่วนตัว"
-        varchar(255) passcode_hash "รหัสผ่านห้อง (ถ้ามี)"
+        varchar(255) passcode "รหัสผ่านห้อง (ถ้ามี)"
         int max_participants "จำนวนผู้ชมสูงสุด"
         datetime created_at "เวลาที่สร้างห้อง"
         datetime updated_at "เวลาที่อัปเดตห้อง"
@@ -344,9 +343,9 @@ erDiagram
 | `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำตัวผู้ใช้ (Auto Increment) |
 | `username` | `VARCHAR(50)` | NO | UNIQUE | ชื่อบัญชีผู้ใช้สำหรับล็อกอินและอ้างอิง |
 | `email` | `VARCHAR(255)` | NO | UNIQUE | อีเมลสำหรับล็อกอินและการติดต่อ |
-| `password_hash` | `VARCHAR(255)` | YES | NULL (อนุญาต NULL สำหรับ Google OAuth) | รหัสผ่านที่ผ่านการเข้ารหัสด้วย bcrypt |
+| `password` | `VARCHAR(255)` | NO | NOT NULL | รหัสผ่านที่ผ่านการเข้ารหัสด้วย bcrypt |
 | `display_name` | `VARCHAR(100)` | NO | - | ชื่อที่ต้องการให้แสดงในห้องและแชท |
-| `avatar_url` | `VARCHAR(500)` | YES | NULL | URL รูปภาพโปรไฟล์ ดึงจาก Google Account (กรณี Google OAuth) หรือดึงจาก [Gravatar](https://gravatar.com/) ผ่าน Email Hash |
+| `avatar_url` | `VARCHAR(500)` | NO | NOT NULL | URL รูปภาพโปรไฟล์ ดึงจาก [Gravatar](https://gravatar.com/) ผ่าน Email Hash |
 | `role` | `ENUM('user', 'admin')` | NO | DEFAULT `'user'` | สิทธิ์ระดับผู้ใช้งานในระบบ |
 | `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันและเวลาที่สมัครสมาชิก |
 | `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันและเวลาที่อัปเดตข้อมูลล่าสุด |
@@ -365,7 +364,7 @@ erDiagram
 | `media_type` | `ENUM('none', 'youtube', 'local_file')` | NO | DEFAULT `'none'` | ชนิดของสื่อที่กำลังสตรีมอยู่ขณะนี้ |
 | `current_media_id` | `INT` | YES | NULL | อ้างอิงวิดีโอปัจจุบันที่กำลังเล่น |
 | `is_private` | `BOOLEAN` | NO | DEFAULT `FALSE` | ห้องส่วนตัว (ต้องใส่รหัสผ่านก่อนเข้า) |
-| `passcode_hash` | `VARCHAR(255)` | YES | NULL | รหัสผ่านเข้าห้องที่ผ่านการ Hash (ถ้ามี) |
+| `passcode` | `VARCHAR(255)` | YES | NULL | รหัสผ่านเข้าห้องที่ผ่านการ Hash (ถ้ามี) |
 | `max_participants` | `INT` | NO | DEFAULT `50` | จำนวนผู้ชมสูงสุดที่อนุญาตในห้อง |
 | `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่สร้างห้อง |
 | `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่มีการแก้ไขข้อมูลห้อง |
@@ -414,15 +413,15 @@ erDiagram
 - **Fields & Values:**
   | Field | ชนิดข้อมูล | ตัวอย่างค่า | คำอธิบาย |
   | :--- | :--- | :--- | :--- |
-  | `mediaId` | `string` (Integer) | `"1"` | รหัสสื่อวิดีโอปัจจุบันที่กำลังเล่น (หรือ `""` หากยังไม่เปิดสื่อ) |
-  | `mediaType` | `string` | `"youtube"` | ประเภทของสื่อ (`"youtube"`, `"local_file"` หรือ `"none"`) |
-  | `sourceUrl` | `string` | `"dQw4w9WgXcQ"` | URL ของไฟล์วิดีโอ หรือ YouTube Video ID สำหรับสตรีม |
-  | `currentTime` | `string` (Float) | `"124.580"` | ตำแหน่งเวลาของวิดีโอปัจจุบัน (วินาที ละเอียดถึงทศนิยม 3 ตำแหน่ง) |
-  | `isPlaying` | `string` (Boolean) | `"true"` | สถานะกำลังเล่น (`true`) หรือหยุดชั่วคราว (`false`) |
-  | `playbackSpeed` | `string` (Float) | `"1.25"` | ความเร็วในการเล่นวิดีโอที่ Host กำหนด |
+  | `media_id` | `string` (Integer) | `"1"` | รหัสสื่อวิดีโอปัจจุบันที่กำลังเล่น (หรือ `""` หากยังไม่เปิดสื่อ) |
+  | `media_type` | `string` | `"youtube"` | ประเภทของสื่อ (`"youtube"`, `"local_file"` หรือ `"none"`) |
+  | `source_url` | `string` | `"dQw4w9WgXcQ"` | URL ของไฟล์วิดีโอ หรือ YouTube Video ID สำหรับสตรีม |
+  | `current_time` | `string` (Float) | `"124.580"` | ตำแหน่งเวลาของวิดีโอปัจจุบัน (วินาที ละเอียดถึงทศนิยม 3 ตำแหน่ง) |
+  | `is_playing` | `string` (Boolean) | `"true"` | สถานะกำลังเล่น (`true`) หรือหยุดชั่วคราว (`false`) |
+  | `playback_speed` | `string` (Float) | `"1.25"` | ความเร็วในการเล่นวิดีโอที่ Host กำหนด |
   | `volume` | `string` (Float) | `"1.00"` | ระดับเสียงหลักของ Host (0.00 - 1.00) |
-  | `updatedBy` | `string` (Integer) | `"5"` | `id` ของ Host ผู้สั่งควบคุมล่าสุด |
-  | `updatedAt` | `string` (ISO 8601) | `"2026-10-09T15:20:00.123Z"` | เวลาที่ส่งคำสั่ง เพื่อนำไปคำนวณ Time Drift ชดเชยความหน่วงฝั่งผู้ชม |
+  | `updated_by` | `string` (Integer) | `"5"` | `id` ของ Host ผู้สั่งควบคุมล่าสุด |
+  | `updated_at` | `string` (ISO 8601) | `"2026-10-09T15:20:00.123Z"` | เวลาที่ส่งคำสั่ง เพื่อนำไปคำนวณ Time Drift ชดเชยความหน่วงฝั่งผู้ชม |
 - **คำสั่งและกลไกการทำงาน:** บันทึกสถานะด้วยคำสั่ง `HSET` หรือ `HMSET room:{roomId}:playback` และดึงข้อมูลสถานะล่าสุดส่งให้ Late-joiner ด้วยคำสั่ง `HGETALL room:{roomId}:playback`
 
 ##### 3.2.2 รายชื่อผู้เข้าร่วมและสถานะออนไลน์ (`room:{roomId}:participants` - Hash)
@@ -431,12 +430,12 @@ erDiagram
 - **Value (JSON Schema):**
   ```json
   {
-    "userId": 5,
-    "displayName": "SomsakDev",
-    "avatarUrl": "https://lh3.googleusercontent.com/a/...",
+    "user_id": 5,
+    "display_name": "SomsakDev",
+    "avatar_url": "https://lh3.googleusercontent.com/a/...",
     "role": "host",
-    "socketId": "sock_xY99aK10",
-    "joinedAt": "2026-10-09T15:10:00.000Z"
+    "socket_id": "sock_xY99aK10",
+    "joined_at": "2026-10-09T15:10:00.000Z"
   }
   ```
 - **กลไกการทำงาน (Operations):**
@@ -451,12 +450,12 @@ erDiagram
   ```json
   {
     "id": "msg_1728461234567",
-    "senderId": 5,
-    "senderName": "SomsakDev",
-    "avatarUrl": "https://lh3.googleusercontent.com/a/...",
+    "sender_id": 5,
+    "sender_name": "SomsakDev",
+    "avatar_url": "https://lh3.googleusercontent.com/a/...",
     "message": "คลิปนี้สนุกมากเลยครับ!",
-    "messageType": "chat",
-    "createdAt": "2026-10-09T15:12:45.000Z"
+    "message_type": "chat",
+    "created_at": "2026-10-09T15:12:45.000Z"
   }
   ```
 - **กลไกการทำงาน (Operations):**
@@ -466,9 +465,9 @@ erDiagram
 ##### 3.2.4 ตรวจสอบ Session เมื่อ Socket หลุดการเชื่อมต่อ (`socket:{socketId}:session` - Hash)
 - **Key ตัวอย่าง:** `socket:sock_xY99aK10:session`
 - **Fields:**
-  - `userId`: `"5"`
-  - `roomId`: `"101"`
-- **กลไกการทำงาน (Operations):** เมื่อ Socket หลุดการเชื่อมต่อ (Disconnect) ดึงข้อมูลด้วยคำสั่ง `HGETALL socket:{socketId}:session` เพื่อทราบ `roomId` และ `userId` จากนั้นลบผู้ใช้ออกจากห้องด้วยคำสั่ง `HDEL` และลบคีย์ด้วยคำสั่ง `DEL` แบบ $O(1)$ โดยไม่ต้องวนลูปค้นหา
+  - `user_id`: `"5"`
+  - `room_id`: `"101"`
+- **กลไกการทำงาน (Operations):** เมื่อ Socket หลุดการเชื่อมต่อ (Disconnect) ดึงข้อมูลด้วยคำสั่ง `HGETALL socket:{socketId}:session` เพื่อทราบ `room_id` และ `user_id` จากนั้นลบผู้ใช้ออกจากห้องด้วยคำสั่ง `HDEL` และลบคีย์ด้วยคำสั่ง `DEL` แบบ $O(1)$ โดยไม่ต้องวนลูปค้นหา
 
 ##### 3.2.5 รายการห้องที่เปิดใช้งาน (`active_rooms` - Set)
 - **Key:** `active_rooms`
@@ -495,10 +494,11 @@ erDiagram
 | | `room:leave` | Client -> Server | `{ roomId }` | ผู้ใช้ออกจากห้อง |
 | | `room:user-joined` | Server -> Room | `{ userId, displayName, role }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนเข้ามาใหม่ |
 | | `room:user-left` | Server -> Room | `{ userId, displayName }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนออกไป |
-| **Media Selection** | `media:change` | Host -> Server | `{ roomId, sourceType, youtubeId?, fileUrl?, title }` | Host สั่งเปลี่ยนวิดีโอ (YouTube หรือ Local file) |
-| | `media:update` | Server -> Room | `{ mediaId, sourceType, youtubeId?, fileUrl?, title }` | กระจายวิดีโอใหม่ให้ทุกคนในห้องสลับเครื่องเล่นพร้อมกัน |
+| | `room:ended` | Server -> Room | `{ roomId, reason? }` | แจ้งเตือนทุกคนในห้องเมื่อห้องถูกปิดโดย Host หรือ Admin |
+| **Video Selection** | `video:change` | Host -> Server | `{ roomId, sourceType, youtubeId?, fileUrl?, title }` | Host สั่งเปลี่ยนวิดีโอ (YouTube หรือ Local file) |
+| | `video:update` | Server -> Room | `{ mediaId, sourceType, youtubeId?, fileUrl?, title }` | กระจายวิดีโอใหม่ให้ทุกคนในห้องสลับเครื่องเล่นพร้อมกัน |
 | **Playback Sync** | `video:control` | Host -> Server | `{ roomId, action, currentTime, speed?, volume? }` | Host สั่งควบคุม (action: `play`, `pause`, `seek`, `ratechange`) |
 | | `video:sync` | Server -> Viewers | `{ action, currentTime, speed, timestamp }` | Broadcast คำสั่งให้เฉพาะฝั่ง Viewers ซิงค์เวลาตามทันที |
 | **Live Chat** | `chat:send` | Client -> Server | `{ roomId, message }` | ผู้ใช้ส่งข้อความแชทในห้อง |
-| | `chat:new-message` | Server -> Room | `{ id, senderName, message, createdAt }` | กระจายข้อความใหม่ให้ทุกคนในห้องเห็นทันที |
-| **System & Error** | `error` | Server -> Client | `{ message }` | ส่งข้อความแจ้งเตือนเมื่อเกิดข้อผิดพลาด (เช่น รหัสผ่านผิด, ติด Rate Limit แชท) |
+| | `chat:new-message` | Server -> Room | `{ id, senderId, senderName, avatarUrl?, message, messageType, createdAt }` | กระจายข้อความใหม่ให้ทุกคนในห้องเห็นทันที |
+| **System & Error** | `error` | Server -> Client | `{ code, message }` | ส่งข้อความแจ้งเตือนเมื่อเกิดข้อผิดพลาด (เช่น รหัสผ่านผิด, ติด Rate Limit แชท) |
