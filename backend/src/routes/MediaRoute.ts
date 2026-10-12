@@ -62,12 +62,29 @@ export default class MediaRoute implements RouteInterface {
                 const mimeType = ext === ".webm" ? "video/webm" : "video/mp4";
 
                 const range = c.req.header("range");
-                if (range) {
-                    const parts = range.replace(/bytes=/, "").split("-");
-                    const start = parseInt(parts[0], 10);
-                    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+                if (range && range.startsWith("bytes=")) {
+                    const parts = range
+                        .replace(/bytes=/, "")
+                        .trim()
+                        .split("-");
+                    let start: number;
+                    let end: number;
 
-                    if (start >= fileSize || end >= fileSize) {
+                    if (parts[0] === "") {
+                        const suffix = parseInt(parts[1], 10);
+                        if (isNaN(suffix) || suffix <= 0) {
+                            return c.text("Requested range not satisfiable", 416, {
+                                "Content-Range": `bytes */${fileSize}`,
+                            });
+                        }
+                        start = Math.max(0, fileSize - suffix);
+                        end = fileSize - 1;
+                    } else {
+                        start = parseInt(parts[0], 10);
+                        end = parts[1] && parts[1].trim() !== "" ? parseInt(parts[1], 10) : fileSize - 1;
+                    }
+
+                    if (isNaN(start) || isNaN(end) || start < 0 || start > end || start >= fileSize || end >= fileSize) {
                         return c.text("Requested range not satisfiable", 416, {
                             "Content-Range": `bytes */${fileSize}`,
                         });
@@ -84,6 +101,7 @@ export default class MediaRoute implements RouteInterface {
                             "Accept-Ranges": "bytes",
                             "Content-Length": chunkSize.toString(),
                             "Content-Type": mimeType,
+                            "Cache-Control": "public, max-age=3600",
                         },
                     });
                 } else {
@@ -96,6 +114,7 @@ export default class MediaRoute implements RouteInterface {
                             "Accept-Ranges": "bytes",
                             "Content-Length": fileSize.toString(),
                             "Content-Type": mimeType,
+                            "Cache-Control": "public, max-age=3600",
                         },
                     });
                 }

@@ -46,6 +46,15 @@ export default class VideoSocket {
                 updatedAt: new Date().toISOString(),
             });
 
+            try {
+                await RoomModel.updateRoomFields(Number(data.roomId), {
+                    mediaType: data.sourceType,
+                    currentMediaId: data.mediaId ?? null,
+                });
+            } catch (dbErr: any) {
+                this.server.warn("Socket:Video", `Failed to update room ${data.roomId} media in DB: ${dbErr?.message || dbErr}`);
+            }
+
             this.io.to(roomKey).emit("video:update", {
                 mediaId: data.mediaId ?? null,
                 sourceType: data.sourceType,

@@ -31,10 +31,8 @@ export default class RoomRoute implements RouteInterface {
                 const search = (c.req.query("search") || "").trim().toLowerCase();
                 const mediaType = c.req.query("mediaType") || "all";
 
-                const allRooms = await RoomModel.selectAllRoom();
-                const filteredRooms = allRooms.filter((r) => {
-                    if (r.status !== "active") return false;
-
+                const activeRooms = await RoomModel.selectActiveRooms();
+                const filteredRooms = activeRooms.filter((r) => {
                     if (search) {
                         const titleMatch = (r.title || "").toLowerCase().includes(search);
                         const codeMatch = (r.roomCode || "").toLowerCase().includes(search);
@@ -48,26 +46,29 @@ export default class RoomRoute implements RouteInterface {
                     return true;
                 });
 
+                const hostIds = Array.from(new Set(filteredRooms.map((r) => r.hostId).filter(Boolean)));
+                let hostMap = new Map();
+                try {
+                    const hostUsers = await UserModel.selectUsersByIds(hostIds);
+                    hostMap = new Map(hostUsers.map((u) => [u.id, u]));
+                } catch {
+                    // ignore host lookup error
+                }
+
                 const roomsWithDetails = await Promise.all(
                     filteredRooms.map(async (room) => {
-                        let host = {
-                            id: room.hostId,
-                            displayName: "Host",
-                            avatarUrl: Gravatar.getDefaultAvatarURL(),
-                        };
-
-                        try {
-                            const hostUser = await UserModel.selectUser(room.hostId);
-                            if (hostUser) {
-                                host = {
-                                    id: hostUser.id,
-                                    displayName: hostUser.displayName,
-                                    avatarUrl: hostUser.avatarUrl,
-                                };
-                            }
-                        } catch {
-                            // ignore host lookup error
-                        }
+                        const hostUser = hostMap.get(room.hostId);
+                        const host = hostUser
+                            ? {
+                                  id: hostUser.id,
+                                  displayName: hostUser.displayName,
+                                  avatarUrl: hostUser.avatarUrl,
+                              }
+                            : {
+                                  id: room.hostId,
+                                  displayName: "Host",
+                                  avatarUrl: Gravatar.getDefaultAvatarURL(),
+                              };
 
                         let participantCount = 0;
                         try {

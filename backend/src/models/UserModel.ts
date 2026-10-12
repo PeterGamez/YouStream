@@ -52,6 +52,19 @@ export default class UserModel {
         }
     }
 
+    public static async selectUsersByIds(ids: number[]): Promise<UserInterface[]> {
+        if (!ids || ids.length === 0) return [];
+        const placeholders = ids.map(() => "?").join(", ");
+        const sql = `SELECT * FROM ${this.table} WHERE id IN (${placeholders})`;
+        const connection = await this.DB.getConnection();
+        try {
+            const [rows] = await connection.execute(sql, ids);
+            return (rows as any[]).map((row) => this.mapRowToUser(row)).filter((u): u is UserInterface => u !== null);
+        } finally {
+            connection.release();
+        }
+    }
+
     public static async selectAllUser(): Promise<UserInterface[]> {
         const sql = `SELECT * FROM ${this.table} ORDER BY id ASC`;
         const connection = await this.DB.getConnection();
