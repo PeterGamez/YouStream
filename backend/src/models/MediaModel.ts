@@ -12,21 +12,21 @@ export default class MediaModel {
         this.DB = DB;
     }
 
-    private static mapRowToMedia(row: MediaRawInterface | any): MediaInterface | null {
+    private static mapRowToMedia(row: MediaRawInterface): MediaInterface | null {
         if (!row) return null;
         return {
             id: row.id,
-            uploaderId: row.uploader_id ?? row.uploaderId,
-            sourceType: row.source_type ?? row.sourceType,
+            uploaderId: row.uploader_id,
+            sourceType: row.source_type,
             title: row.title,
-            sourceUrl: row.source_url ?? row.sourceUrl,
-            youtubeVideoId: row.youtube_video_id ?? row.youtubeVideoId ?? null,
-            filePath: row.file_path ?? row.filePath ?? null,
-            fileSizeBytes: row.file_size_bytes !== null && row.file_size_bytes !== undefined ? Number(row.file_size_bytes) : (row.fileSizeBytes ?? null),
-            mimeType: row.mime_type ?? row.mimeType ?? null,
-            durationSeconds: row.duration_seconds !== null && row.duration_seconds !== undefined ? Number(row.duration_seconds) : (row.durationSeconds ?? null),
-            createdAt: row.created_at ?? row.createdAt,
-            updatedAt: row.updated_at ?? row.updatedAt,
+            sourceUrl: row.source_url,
+            youtubeVideoId: row.youtube_video_id,
+            filePath: row.file_path,
+            fileSizeBytes: row.file_size_bytes,
+            mimeType: row.mime_type,
+            durationSeconds: row.duration_seconds,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
         };
     }
 

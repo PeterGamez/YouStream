@@ -13,18 +13,18 @@ export default class UserModel {
         this.DB = DB;
     }
 
-    private static mapRowToUser(row: UserRawInterface | any): UserInterface | null {
+    private static mapRowToUser(row: UserRawInterface): UserInterface | null {
         if (!row) return null;
         return {
             id: row.id,
             username: row.username,
             email: row.email,
             password: row.password,
-            displayName: row.display_name ?? row.displayName ?? "",
-            avatarUrl: row.avatar_url ?? row.avatarUrl ?? "",
+            displayName: row.display_name,
+            avatarUrl: row.avatar_url,
             role: row.role,
-            createdAt: row.created_at ?? row.createdAt,
-            updatedAt: row.updated_at ?? row.updatedAt,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
         };
     }
 
