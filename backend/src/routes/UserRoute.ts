@@ -117,7 +117,9 @@ export default class UserRoute implements RouteInterface {
                     return c.json({ error: "Current password is incorrect" }, 401);
                 }
 
-                await UserModel.updateUser(user.id, "password", newPassword);
+                const hashedPassword = await this.server.Password.hash(newPassword);
+
+                await UserModel.updateUser(user.id, "password", hashedPassword);
 
                 this.server.log("User Route", `User changed password: ${user.id} (${user.username})`);
 

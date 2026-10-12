@@ -29,8 +29,7 @@ export default class UserModel {
     }
 
     public static async createUser(username: string, email: string, password: string, displayName: string): Promise<number> {
-        const gravatar = await Gravatar.isAvatarExist(email);
-        const avatarUrl = gravatar.isExist ? gravatar.url : null;
+        const avatarUrl = await Gravatar.getAvatarURL(email);
 
         const connection = await this.DB.getConnection();
         try {

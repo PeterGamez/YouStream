@@ -1,7 +1,6 @@
 import type { Server as IOServer, Socket } from "socket.io";
 
 import type Server from "../Server";
-import Gravatar from "../integrations/Gravatar";
 import type { RedisParticipantRole } from "../interfaces/Redis";
 import type { RoomEndPayload, RoomJoinPayload, RoomLeavePayload, SocketErrorPayload } from "../interfaces/Socket";
 import RoomModel from "../models/RoomModel";
@@ -119,7 +118,7 @@ export default class RoomSocket {
 
             const role: RedisParticipantRole = isHost ? "host" : "viewer";
             const displayName = socket.data?.user?.displayName || socket.data?.user?.username || "";
-            const avatarUrl = socket.data?.user?.avatarUrl || Gravatar.getDefaultAvatarURL();
+            const avatarUrl = socket.data?.user?.avatarUrl;
 
             await RoomStateService.addParticipant(roomId, {
                 userId,

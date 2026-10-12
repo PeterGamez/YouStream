@@ -1,7 +1,6 @@
 import type { Server as IOServer, Socket } from "socket.io";
 
 import type Server from "../Server";
-import Gravatar from "../integrations/Gravatar";
 import type { RedisChatMessage } from "../interfaces/Redis";
 import type { ChatMessagePayload, ChatSendPayload, SocketErrorPayload } from "../interfaces/Socket";
 import RoomStateService from "../services/RoomStateService";
@@ -97,7 +96,7 @@ export default class ChatSocket {
 
             const senderId = userId;
             const senderName = participant.displayName || socket.data?.user?.displayName || socket.data?.user?.username || "";
-            const avatarUrl = participant.avatarUrl || socket.data?.user?.avatarUrl || Gravatar.getDefaultAvatarURL();
+            const avatarUrl = participant.avatarUrl || socket.data?.user?.avatarUrl;
 
             this.server.log("Socket:Chat", `Chat message in ${roomKey} from ${senderName} (${senderId}): ${data.message}`);
 

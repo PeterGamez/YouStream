@@ -33,8 +33,8 @@ async function run() {
         await next();
     });
 
-    initRoutes(server, app);
     initModels(server);
+    initRoutes(server, app);
 
     RedisService.init(server.Redis);
 
