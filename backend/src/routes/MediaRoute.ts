@@ -178,7 +178,7 @@ export default class MediaRoute implements RouteInterface {
 
                     const writeStream = createWriteStream(targetPath);
                     try {
-                        await pipeline(Readable.fromWeb(file.stream() as any), sizeLimiter, writeStream);
+                        await pipeline(Readable.fromWeb(file.stream()), sizeLimiter, writeStream);
                     } catch (streamError: any) {
                         await unlink(targetPath).catch(() => {});
                         if (bytesWritten > MediaRoute.MAX_FILE_SIZE || streamError?.message?.includes("exceeds")) {

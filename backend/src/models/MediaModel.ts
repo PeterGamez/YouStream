@@ -7,12 +7,24 @@ export default class MediaModel {
     private static table: string;
     private static DB: Pool;
 
+    private static readonly COLUMN_MAP: Record<string, string> = {
+        uploaderId: "uploader_id",
+        sourceType: "source_type",
+        sourceUrl: "source_url",
+        youtubeVideoId: "youtube_video_id",
+        filePath: "file_path",
+        fileSizeBytes: "file_size_bytes",
+        mimeType: "mime_type",
+        durationSeconds: "duration_seconds",
+        title: "title",
+    };
+
     public static init(table: string, DB: Pool) {
         this.table = table;
         this.DB = DB;
     }
 
-    private static mapRowToMedia(row: MediaRawInterface): MediaInterface  {
+    private static mapRowToMedia(row: MediaRawInterface): MediaInterface {
         if (!row) return null;
         return {
             id: row.id,
@@ -118,18 +130,7 @@ export default class MediaModel {
     }
 
     public static async updateMedia<T extends keyof MediaType>(id: number, type: T, value: MediaType[T]): Promise<void> {
-        const columnMap: Record<string, string> = {
-            uploaderId: "uploader_id",
-            sourceType: "source_type",
-            sourceUrl: "source_url",
-            youtubeVideoId: "youtube_video_id",
-            filePath: "file_path",
-            fileSizeBytes: "file_size_bytes",
-            mimeType: "mime_type",
-            durationSeconds: "duration_seconds",
-            title: "title",
-        };
-        const column = columnMap[type as string] || (type as string);
+        const column = this.COLUMN_MAP[type as string] || (type as string);
         const sql = `UPDATE ${this.table} SET ${column} = ? WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
@@ -141,22 +142,12 @@ export default class MediaModel {
 
     public static async updateMediaFields(id: number, fields: Partial<MediaType>): Promise<void> {
         const updates: string[] = [];
-        const values: any[] = [];
-        const columnMap: Record<string, string> = {
-            uploaderId: "uploader_id",
-            sourceType: "source_type",
-            sourceUrl: "source_url",
-            youtubeVideoId: "youtube_video_id",
-            filePath: "file_path",
-            fileSizeBytes: "file_size_bytes",
-            mimeType: "mime_type",
-            durationSeconds: "duration_seconds",
-            title: "title",
-        };
+        const values: (string | number)[] = [];
 
         for (const [key, val] of Object.entries(fields)) {
             if (val !== undefined) {
-                const col = columnMap[key] || key;
+                const col = this.COLUMN_MAP[key];
+                if (!col) continue;
                 updates.push(`${col} = ?`);
                 values.push(val);
             }

@@ -8,6 +8,17 @@ export default class UserModel {
     private static table: string;
     private static DB: Pool;
 
+    private static readonly COLUMN_MAP: Record<string, string> = {
+        displayName: "display_name",
+        avatarUrl: "avatar_url",
+        display_name: "display_name",
+        avatar_url: "avatar_url",
+        password: "password",
+        email: "email",
+        username: "username",
+        role: "role",
+    };
+
     public static init(table: string, DB: Pool) {
         this.table = table;
         this.DB = DB;
@@ -17,7 +28,7 @@ export default class UserModel {
         return this.table;
     }
 
-    private static mapRowToUser(row: UserRawInterface): UserInterface  {
+    private static mapRowToUser(row: UserRawInterface): UserInterface {
         if (!row) return null;
         return {
             id: row.id,
@@ -126,17 +137,7 @@ export default class UserModel {
     }
 
     public static async updateUser<T extends keyof UserType>(id: number, type: T, value: UserType[T]): Promise<void> {
-        const columnMap: Record<string, string> = {
-            displayName: "display_name",
-            avatarUrl: "avatar_url",
-            display_name: "display_name",
-            avatar_url: "avatar_url",
-            password: "password",
-            email: "email",
-            username: "username",
-            role: "role",
-        };
-        const column = columnMap[type as string] || (type as string);
+        const column = this.COLUMN_MAP[type as string] || (type as string);
         const sql = `UPDATE ${this.table} SET ${column} = ? WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
@@ -148,7 +149,7 @@ export default class UserModel {
 
     public static async updateUserFields(id: number, fields: { displayName?: string; avatarUrl?: string }): Promise<void> {
         const updates: string[] = [];
-        const values: any[] = [];
+        const values: (string | number)[] = [];
 
         if (fields.displayName !== undefined) {
             updates.push("display_name = ?");
