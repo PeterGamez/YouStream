@@ -40,7 +40,6 @@ export default class MediaRoute implements RouteInterface {
     }
 
     private registerRoutes() {
-        // Public streaming endpoint for HTML5 video players (No JWT Auth)
         this.app.get("/stream/:filename", async (c) => {
             try {
                 const filename = c.req.param("filename");
@@ -81,10 +80,16 @@ export default class MediaRoute implements RouteInterface {
                         end = fileSize - 1;
                     } else {
                         start = parseInt(parts[0], 10);
-                        end = parts[1] && parts[1].trim() !== "" ? parseInt(parts[1], 10) : fileSize - 1;
+                        const rawEnd = parts[1] && parts[1].trim() !== "" ? parseInt(parts[1], 10) : fileSize - 1;
+                        if (isNaN(start) || isNaN(rawEnd)) {
+                            return c.text("Requested range not satisfiable", 416, {
+                                "Content-Range": `bytes */${fileSize}`,
+                            });
+                        }
+                        end = Math.min(rawEnd, fileSize - 1);
                     }
 
-                    if (isNaN(start) || isNaN(end) || start < 0 || start > end || start >= fileSize || end >= fileSize) {
+                    if (isNaN(start) || isNaN(end) || start < 0 || start > end || start >= fileSize) {
                         return c.text("Requested range not satisfiable", 416, {
                             "Content-Range": `bytes */${fileSize}`,
                         });
@@ -125,7 +130,6 @@ export default class MediaRoute implements RouteInterface {
             }
         });
 
-        // Apply JWT Authentication to all subsequent media management endpoints
         this.app.use("*", this.server.Middleware.auth());
 
         this.app.post(

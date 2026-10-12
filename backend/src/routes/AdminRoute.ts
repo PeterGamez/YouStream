@@ -149,21 +149,38 @@ export default class AdminRoute implements RouteInterface {
                     return c.json({ error: "User not found" }, 404);
                 }
 
-                try {
-                    const activeRooms = await RoomModel.selectActiveRoomsByHost(id);
-                    for (const room of activeRooms) {
+                const activeRooms = await RoomModel.selectActiveRoomsByHost(id);
+
+                for (const room of activeRooms) {
+                    let cleanedUp = false;
+                    let lastError: Error | null = null;
+                    const maxRetries = 3;
+
+                    for (let attempt = 1; attempt <= maxRetries; attempt++) {
                         try {
                             await RoomModel.endRoom(room.id);
                             await RoomStateService.cleanupRoom(room.id);
                             RoomSocket.endRoom(room.id, "Room ended: Host account was suspended by administrator");
+                            cleanedUp = true;
+                            break;
                         } catch (roomErr) {
-                            const roomMsg = roomErr instanceof Error ? roomErr.message : String(roomErr);
-                            this.server.warn("Admin Route", `Failed to end room ${room.id} for user ${id}: ${roomMsg}`);
+                            lastError = roomErr instanceof Error ? roomErr : new Error(String(roomErr));
+                            this.server.warn("Admin Route", `Attempt ${attempt}/${maxRetries} failed to cleanup room ${room.id} for user ${id}: ${lastError.message}`);
+                            if (attempt < maxRetries) {
+                                await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+                            }
                         }
                     }
-                } catch (roomQueryErr) {
-                    const roomQueryMsg = roomQueryErr instanceof Error ? roomQueryErr.message : String(roomQueryErr);
-                    this.server.warn("Admin Route", `Failed to query active rooms for user ${id}: ${roomQueryMsg}`);
+
+                    if (!cleanedUp) {
+                        this.server.error("Admin Route", `Aborting user deletion: failed to terminate room ${room.id} for user ${id} after ${maxRetries} attempts`);
+                        return c.json(
+                            {
+                                error: `Failed to terminate active room ${room.id}. User deletion aborted: ${lastError?.message || "Unknown error"}`,
+                            },
+                            500
+                        );
+                    }
                 }
 
                 await UserModel.deleteUser(id);
