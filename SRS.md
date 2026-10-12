@@ -51,13 +51,13 @@
 - **Backend / API:** 
   - Server Framework: [Hono](https://hono.dev/) บน Node.js / Bun Runtime
   - Real-time Server: `socket.io` (จัดกลุ่มการกระจายข้อมูลผ่าน Socket Rooms)
-  - In-Memory Cache & State Store: [Redis](https://redis.io/) ผ่านไดรเวอร์ `ioredis` (ใช้เฉพาะฝั่ง Backend สำหรับแคช Playback State แบบเรียลไทม์, แคชรายการ Active Rooms, และ Rate Limiting)
-  - File Handling: Multi-part Form Data Parser (รองรับการอัปโหลดไฟล์วิดีโอขนาดไม่เกิน 500MB)
+  - In-Memory Cache & State Store: [Redis](https://redis.io/) ผ่านไดรเวอร์ `ioredis` (ใช้เฉพาะฝั่ง Backend สำหรับแคช Playback State แบบเรียลไทม์, แคชรายการ Active Rooms, แคชข้อมูลผู้ใช้, และ Rate Limiting)
+  - File Handling: Multi-part Form Data Parser (รองรับการอัปโหลดไฟล์วิดีโอผ่าน `/media/upload` ขนาดไม่เกิน 500MB และสตรีมไฟล์ผ่าน `/media/stream/:filename` แบบ HTTP 206 Partial Content)
 - **Database & Storage:** 
-  - Relational Database Management System (RDBMS): [MariaDB](https://mariadb.org/) / MySQL (ไดรเวอร์ `mysql2` สำหรับจัดเก็บข้อมูลถาวร)
+  - Relational Database Management System (RDBMS): [MariaDB](https://mariadb.org/) / MySQL (ผ่านไดรเวอร์ `mysql2/promise`)
   - In-Memory Data Store (Backend Only): [Redis](https://redis.io/) (ไดรเวอร์ `ioredis` สำหรับ Fast In-Memory Cache)
 - **Authentication & Security:** 
-  - JSON Web Tokens (JWT) สำหรับการยืนยันตัวตนแบบ Stateless
+  - JSON Web Tokens (JWT) สำหรับการยืนยันตัวตนแบบ Stateless (`hono/jwt`, อัลกอริทึม HS256 พร้อม Access Token และ Refresh Token)
   - Password Hashing: `bcrypt`
 - **Hosting & Deployment:** 
   - Backend, Redis & Database: OVHcloud / Railway
@@ -105,7 +105,7 @@
   - ใช้ **Redis** ในฝั่ง Backend เพื่อแคชสถานะการเล่นวิดีโอล่าสุด (`Playback State`) และข้อมูลห้องออนไลน์แบบ In-Memory ช่วยให้ Late-joiner ซิงค์ได้รวดเร็วระดับมิลลิวินาที และลดภาระ I/O การอ่าน/เขียนซ้ำ ๆ บน MariaDB
   - ระบบรองรับการอัปโหลดไฟล์วิดีโอขนาดใหญ่ (สูงสุด 500MB) ได้อย่างราบรื่นโดยไม่บล็อก Event Loop ของเซิร์ฟเวอร์
 - **Security & Authorization:**
-  - รหัสผ่านของผู้ใช้ต้องถูกเข้ารหัสด้วย `bcrypt` (Salt Rounds >= 10)
+  - รหัสผ่านของผู้ใช้ต้องถูกเข้ารหัสด้วย `bcrypt`
   - มีการตรวจสอบสิทธิ์ (Authorization Middleware) เพื่อให้มั่นใจว่าคำสั่งควบคุมวิดีโอ (Play, Pause, Seek, Change Source) ส่งมาจาก Host ของห้องนั้นจริง
   - มีการตรวจสอบไฟล์อัปโหลดอย่างเคร่งครัด: ตรวจสอบ MIME Type (รองรับเฉพาะ `video/mp4`, `video/webm`), ขนาดไฟล์ไม่เกิน 500MB และป้องกันช่องโหว่ Path Traversal ในการจัดเก็บไฟล์
   - การเรียกใช้งาน API มีการป้องกัน SQL Injection ผ่าน Prepared Statements ของ `mysql2` และป้องกัน XSS บนระบบแชท
@@ -160,15 +160,15 @@ sequenceDiagram
 
     Host->>FE_Host: วางลิงก์ YouTube
     FE_Host->>FE_Host: สกัด Video ID จาก URL
-    FE_Host->>BE: Socket Emit ('video:change', { type: 'youtube', videoId })
-    BE->>Redis: แคช Current Media & Playback State บน Redis
-    BE-->>FE_Host: Broadcast ('video:update', data)
-    BE-->>FE_Viewer: Broadcast ('video:update', data)
+    FE_Host->>BE: Socket Emit ('video:change', { roomId, sourceType: 'youtube', youtubeId, title })
+    BE->>Redis: แคช Current Media & Playback State บน Redis (room:{roomId}:playback)
+    BE-->>FE_Host: Broadcast ('video:update', { mediaId, sourceType: 'youtube', youtubeId, title })
+    BE-->>FE_Viewer: Broadcast ('video:update', { mediaId, sourceType: 'youtube', youtubeId, title })
     Note over FE_Host, FE_Viewer: เครื่องเล่น YouTube IFrame API โหลด Video ID เดียวกัน
     Host->>FE_Host: สั่ง Play / Pause / Seek
-    FE_Host->>BE: Socket Emit ('video:control', { action, currentTime, speed })
+    FE_Host->>BE: Socket Emit ('video:control', { roomId, action, currentTime, speed })
     BE->>Redis: อัปเดต Playback State ลง Redis (room:{roomId}:playback)
-    BE-->>FE_Viewer: Broadcast ('video:sync', { action, currentTime, speed })
+    BE-->>FE_Viewer: Broadcast ('video:sync', { action, currentTime, speed, timestamp })
     FE_Viewer->>FE_Viewer: YouTube Player ซิงค์เวลาและเล่นตาม Host ทันที
 ```
 
@@ -187,18 +187,18 @@ sequenceDiagram
     participant FE_Viewer as Next.js (Viewers)
 
     Host->>FE_Host: เลือกไฟล์วิดีโอจากเครื่อง (.mp4, .webm <= 500MB)
-    FE_Host->>BE: HTTP POST /api/upload (Multipart Form Data)
-    Note over BE: ตรวจสอบ MIME type, ตรวจสอบขนาด <= 500MB, บันทึกลง Storage
+    FE_Host->>BE: HTTP POST /media/upload (Multipart Form Data)
+    Note over BE: ตรวจสอบ MIME type (video/mp4, video/webm), ขนาด <= 500MB, บันทึกลง Storage
     BE->>MariaDB: บันทึกข้อมูลมีเดียลงตาราง media
-    BE-->>FE_Host: HTTP Response 201 Created { fileUrl, mediaId, title }
-    FE_Host->>Socket: Socket Emit ('video:change', { type: 'local_file', url: fileUrl })
-    Socket->>Redis: บันทึก Current Media & Playback State ลง Redis
-    Socket-->>FE_Viewer: Broadcast ('video:update', { type: 'local_file', url: fileUrl })
-    Note over FE_Host, FE_Viewer: แท็ก <video> ของทุกคนโหลดไฟล์สตรีมจาก fileUrl
+    BE-->>FE_Host: HTTP Response 201 Created { fileUrl, mediaId, title, sourceType, fileSizeBytes, mimeType }
+    FE_Host->>Socket: Socket Emit ('video:change', { roomId, sourceType: 'local_file', fileUrl, title, mediaId })
+    Socket->>Redis: บันทึก Current Media & Playback State ลง Redis (room:{roomId}:playback)
+    Socket-->>FE_Viewer: Broadcast ('video:update', { mediaId, sourceType: 'local_file', fileUrl, title })
+    Note over FE_Host, FE_Viewer: แท็ก <video> ของทุกคนโหลดไฟล์สตรีมจาก fileUrl (/media/stream/:filename)
     Host->>FE_Host: สั่ง Play / Pause / Seek / Speed
-    FE_Host->>Socket: Socket Emit ('video:control', { action, currentTime, speed })
+    FE_Host->>Socket: Socket Emit ('video:control', { roomId, action, currentTime, speed })
     Socket->>Redis: อัปเดต Playback State ลง Redis (room:{roomId}:playback)
-    Socket-->>FE_Viewer: Broadcast ('video:sync', { action, currentTime, speed })
+    Socket-->>FE_Viewer: Broadcast ('video:sync', { action, currentTime, speed, timestamp })
     FE_Viewer->>FE_Viewer: แท็ก <video> ฝั่งผู้ชมซิงค์คำสั่งแบบเรียลไทม์
 ```
 
@@ -216,12 +216,12 @@ sequenceDiagram
 
     User->>FE: พิมพ์ข้อความในกล่องแชทและกดส่ง
     FE->>Socket: Socket Emit ('chat:send', { roomId, message })
-    Socket->>Redis: ตรวจสอบ Rate Limit (SET ratelimit:chat:{userId} 1 EX 1 NX)
+    Socket->>Redis: ตรวจสอบ Rate Limit (SET rate_limit:chat:{userId} 1 EX 1 NX)
     alt ถูก Rate Limit (ส่งข้อความถี่เกินไป < 1 วินาที)
         Socket-->>FE: Socket Emit ('chat:error', { message: 'ส่งข้อความเร็วเกินไป กรุณารอสักครู่' })
     else ผ่านการตรวจสอบ (อนุญาตให้ส่ง)
         Socket->>Redis: RPUSH + LTRIM (room:{roomId}:messages, Capped 100 ข้อความ)
-        Socket-->>FE_All: Broadcast ('chat:message', { id, senderId, senderName, avatarUrl, message, createdAt })
+        Socket-->>FE_All: Broadcast ('chat:new-message', { id, senderId, senderName, avatarUrl, message, messageType, createdAt })
         FE_All->>FE_All: แสดงผลข้อความใหม่ในหน้าต่างแชททันที
     end
     Note over Socket, FE_All: ผู้ชมที่เข้าห้องใหม่ (Late-joiner) จะได้รับประวัติแชทล่าสุดผ่าน LRANGE (100 ข้อความ)
@@ -232,8 +232,8 @@ sequenceDiagram
 ## 🗄️ โครงสร้างฐานข้อมูลและการจัดการสถานะ (Database & In-Memory State Schema)
 
 ระบบแบ่งการจัดการข้อมูลในฝั่ง Backend ออกเป็น 2 ส่วนตามสถาปัตยกรรม High-Performance Real-Time:
-1. **MariaDB / MySQL (Persistent Database):** สำหรับจัดเก็บข้อมูลเชิงสัมพันธ์หลักของระบบอย่างถาวร (Users, Rooms, Media) ตาม ER Diagram และ Data Dictionary ในหัวข้อที่ 1 และ 2
-2. **Redis (In-Memory Data Store & Cache - ใช้เฉพาะฝั่ง Backend ผ่าน `ioredis`):** สำหรับจัดเก็บและจัดการข้อมูลสถานะแบบเรียลไทม์ทั้งหมด (Real-time Video Playback State, Active Participants Presence, Ephemeral Room Messages, Active Rooms List, และ Chat Rate Limiting) ตามรายละเอียดในหัวข้อที่ 3 เพื่อลดภาระ Disk I/O บน MariaDB ให้เหลือเฉพาะข้อมูลถาวร และทำให้ระบบตอบสนองได้เร็วระดับ Sub-millisecond
+1. **MariaDB / MySQL (Persistent Database):** สำหรับจัดเก็บข้อมูลเชิงสัมพันธ์หลักของระบบอย่างถาวร (user, room, media) ตาม ER Diagram และ Data Dictionary ในหัวข้อที่ 1 และ 2
+2. **Redis (In-Memory Data Store & Cache - ใช้เฉพาะฝั่ง Backend ผ่าน `ioredis`):** สำหรับจัดเก็บและจัดการข้อมูลสถานะแบบเรียลไทม์ทั้งหมด (Real-time Video Playback State, Active Participants Presence, Ephemeral Room Messages, Active Rooms List, User Safe Profile Cache, และ Chat Rate Limiting) ตามรายละเอียดในหัวข้อที่ 3 เพื่อลดภาระ Disk I/O บน MariaDB ให้เหลือเฉพาะข้อมูลถาวร และทำให้ระบบตอบสนองได้เร็วระดับ Sub-millisecond
 
 ### 1. Entity Relationship Diagram (ER Diagram)
 
@@ -242,18 +242,19 @@ sequenceDiagram
 ```mermaid
 erDiagram
     %% Persistent Relational Entities (MariaDB)
-    USERS ||--o{ ROOMS : "creates / hosts"
-    USERS ||--o{ MEDIA : "uploads / provides"
-    ROOMS }o--o| MEDIA : "plays current_media"
+    USER ||--o{ ROOM : "creates / hosts"
+    USER ||--o{ MEDIA : "uploads / provides"
+    ROOM }o--o| MEDIA : "plays current_media"
 
     %% Real-Time In-Memory Entities (Redis State Store)
-    USERS ||--o{ REDIS_ROOM_PARTICIPANTS : "joins (online)"
-    USERS ||--o{ REDIS_ROOM_MESSAGES : "sends"
-    ROOMS ||--|| REDIS_PLAYBACK_STATE : "syncs playback"
-    ROOMS ||--o{ REDIS_ROOM_PARTICIPANTS : "contains active viewers"
-    ROOMS ||--o{ REDIS_ROOM_MESSAGES : "stores recent chat"
+    USER ||--o{ REDIS_ROOM_PARTICIPANTS : "joins (online)"
+    USER ||--o{ REDIS_ROOM_MESSAGES : "sends"
+    USER ||--o| REDIS_USER_CACHE : "caches safe profile"
+    ROOM ||--|| REDIS_PLAYBACK_STATE : "syncs playback"
+    ROOM ||--o{ REDIS_ROOM_PARTICIPANTS : "contains active viewers"
+    ROOM ||--o{ REDIS_ROOM_MESSAGES : "stores recent chat"
 
-    USERS {
+    USER {
         int id PK "Auto Increment"
         varchar(50) username UK "ชื่อผู้ใช้"
         varchar(255) email UK "อีเมล"
@@ -265,7 +266,7 @@ erDiagram
         datetime updated_at "เวลาที่แก้ไขล่าสุด"
     }
 
-    ROOMS {
+    ROOM {
         int id PK "Auto Increment"
         char(8) room_code UK "รหัสห้องตัวเลข 8 หลัก (Unique 8-digit Code)"
         varchar(150) title "ชื่อห้องสตรีม"
@@ -331,13 +332,18 @@ erDiagram
         string message_type "chat / system"
         string created_at "เวลาที่ส่งข้อความ"
     }
+
+    REDIS_USER_CACHE {
+        string user_key PK "Key user:{userId} (String)"
+        string value "JSON UserSafeDTO (TTL 60s)"
+    }
 ```
 
 ---
 
 ### 2. พจนานุกรมข้อมูล (Data Dictionary & Table Specifications)
 
-#### 2.1 ตาราง `users` (ตารางข้อมูลผู้ใช้งาน)
+#### 2.1 ตาราง `user` (ตารางข้อมูลผู้ใช้งาน)
 | ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำตัวผู้ใช้ (Auto Increment) |
@@ -352,7 +358,7 @@ erDiagram
 
 ---
 
-#### 2.2 ตาราง `rooms` (ตารางข้อมูลห้องสตรีมมิ่ง)
+#### 2.2 ตาราง `room` (ตารางข้อมูลห้องสตรีมมิ่ง)
 | ชื่อฟิลด์ (Field) | ชนิดข้อมูล (Data Type) | Nullable | Constraints / Default | คำอธิบาย (Description) |
 | :--- | :--- | :---: | :--- | :--- |
 | `id` | `INT` | NO | PRIMARY KEY, AUTO_INCREMENT | รหัสประจำตัวห้อง (Auto Increment) |
@@ -404,7 +410,8 @@ erDiagram
 | `room:{roomId}:messages` | **List** | `RPUSH`, `LTRIM`, `LRANGE` | จัดเก็บประวัติข้อความแชทล่าสุดในห้องแบบ Capped List (จำกัด 100 ข้อความล่าสุด) | ลบเมื่อปิดห้อง หรือตั้ง TTL 24 ชม. |
 | `socket:{socketId}:session` | **Hash** | `HSET`, `HGETALL`, `DEL` | แมป Socket ID กลับไปยัง `userId` และ `roomId` สำหรับจัดการ Disconnect แบบ $O(1)$ | ลบทันทีเมื่อ Socket Disconnect |
 | `active_rooms` | **Set** | `SADD`, `SREM`, `SMEMBERS`, `SCARD` | เก็บรายชื่อ `roomId` ที่กำลังเปิดอยู่ สำหรับแสดงใน Room Lobby ได้รวดเร็ว | เพิ่มเมื่อเปิดห้อง (`SADD`) และลบเมื่อปิดห้อง (`SREM`) |
-| `ratelimit:chat:{userId}` | **String** | `SET ... EX 1 NX` | จำกัดความถี่การส่งแชทป้องกันสแปม (Rate Limit 1 ข้อความ / 1 วินาที) | TTL 1 วินาที (หมดอายุอัตโนมัติ) |
+| `rate_limit:chat:{userId}` | **String** | `SET ... EX 1 NX` | จำกัดความถี่การส่งแชทป้องกันสแปม (Rate Limit 1 ข้อความ / 1 วินาที) | TTL 1 วินาที (หมดอายุอัตโนมัติ) |
+| `user:{userId}` | **String** | `GET`, `SET`, `EXPIRE`, `DEL` | แคชข้อมูลโปรไฟล์ผู้ใช้แบบปลอดภัย (`UserSafeDTO`) ลดภาระการคิวรีฐานข้อมูลซ้ำในการตรวจสอบ Auth Middleware | TTL 60 วินาที (ลบแคชเมื่อแก้ไขโปรไฟล์/รหัสผ่าน/สิทธิ์) |
 
 #### 3.2 รายละเอียดและโครงสร้างข้อมูลเชิงลึก (In-Depth Schema Specifications)
 
@@ -477,28 +484,120 @@ erDiagram
   - **ปิดห้อง:** ลบรหัสห้องออกจากเซตด้วยคำสั่ง `SREM active_rooms {roomId}`
   - **ดึงรายการห้องออนไลน์ทั้งหมด:** ดึงรายการทั้งหมดด้วยคำสั่ง `SMEMBERS active_rooms`
 
-##### 3.2.6 ป้องกันการส่งแชทรัว / สแปม (`ratelimit:chat:{userId}` - String with TTL)
-- **Key ตัวอย่าง:** `ratelimit:chat:5`
-- **กลไกการทำงาน (Operations):** ตรวจสอบและล็อกการส่งข้อความด้วยคำสั่ง `SET ratelimit:chat:{userId} "1" EX 1 NX` หากคืนค่า `null` แสดงว่ายังไม่พ้นช่วงจำกัดเวลา (1 วินาที) ให้ปฏิเสธข้อความและแจ้งเตือนผู้ใช้ทันที
+##### 3.2.6 ป้องกันการส่งแชทรัว / สแปม (`rate_limit:chat:{userId}` - String with TTL)
+- **Key ตัวอย่าง:** `rate_limit:chat:5`
+- **กลไกการทำงาน (Operations):** ตรวจสอบและล็อกการส่งข้อความด้วยคำสั่ง `SET rate_limit:chat:{userId} "1" EX 1 NX` หากคืนค่า `null` แสดงว่ายังไม่พ้นช่วงจำกัดเวลา (1 วินาที) ให้ปฏิเสธข้อความและแจ้งเตือนผู้ใช้ด้วย Event `chat:error` ทันที
+
+##### 3.2.7 แคชข้อมูลผู้ใช้สำหรับยืนยันตัวตน (`user:{userId}` - String with TTL)
+- **Key ตัวอย่าง:** `user:5`
+- **Value (JSON Schema):**
+  ```json
+  {
+    "id": 5,
+    "username": "somsak",
+    "email": "somsak@youstream.app",
+    "displayName": "SomsakDev",
+    "avatarUrl": "https://lh3.googleusercontent.com/a/...",
+    "role": "user"
+  }
+  ```
+- **กลไกการทำงาน (Operations):**
+  - **บันทึกแคช:** เมื่อผู้ใช้ส่งคำขอผ่าน Middleware `auth` และดึงข้อมูลสำเร็จ เซิร์ฟเวอร์จะบันทึกด้วยคำสั่ง `SET user:{userId} <JSON>` และตั้งเวลาหมดอายุ `EXPIRE user:{userId} 60` (TTL 60 วินาที)
+  - **ลบแคช (Cache Invalidation):** เมื่อผู้ใช้แก้ไข Display Name, เปลี่ยนรหัสผ่าน หรือ Admin ปรับเปลี่ยน Role หรือลบผู้ใช้ ระบบจะสั่งลบแคชทันทีด้วยคำสั่ง `DEL user:{userId}` เพื่อรักษาความถูกต้องของข้อมูล
 
 ---
 
 ## ⚡ สเปกการสื่อสารแบบเรียลไทม์ (Socket.io Event Specifications)
 
-เพื่อให้การทำงานระหว่าง Frontend Next.js และ Backend Hono ระบบกำหนด Event หลักดังนี้:
+เพื่อให้การทำงานระหว่าง Frontend Next.js และ Backend Hono มีความแม่นยำ ระบบกำหนด Event หลักดังนี้:
 
 | หมวดหมู่ (Category) | ชื่อ Event (Event Name) | ทิศทาง (Direction) | ข้อมูลที่ส่ง (Payload) | คำอธิบาย (Description) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Room Connection** | `room:join` | Client -> Server | `{ roomId, passcode? }` | ผู้ใช้ขอเข้าร่วมห้องสตรีม |
+| **Room Connection** | `room:join` | Client -> Server | `{ roomId, passcode? }` | ผู้ใช้ขอเข้าร่วมห้องสตรีม (ตรวจสอบสิทธิ์, รหัสผ่าน, และความจุห้อง) |
 | | `room:joined` | Server -> Client | `{ roomInfo, playbackState, participants, recentMessages }` | ส่งข้อมูลห้อง, สถานะวิดีโอจาก Redis, รายชื่อผู้ใช้ และประวัติแชทล่าสุดให้ Late-joiner |
-| | `room:leave` | Client -> Server | `{ roomId }` | ผู้ใช้ออกจากห้อง |
+| | `room:leave` | Client -> Server | `{ roomId }` | ผู้ใช้ออกจากห้อง (ลบ Session และแจ้งเตือนห้อง) |
 | | `room:user-joined` | Server -> Room | `{ userId, displayName, role }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนเข้ามาใหม่ |
-| | `room:user-left` | Server -> Room | `{ userId, displayName }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนออกไป |
-| | `room:ended` | Server -> Room | `{ roomId, reason? }` | แจ้งเตือนทุกคนในห้องเมื่อห้องถูกปิดโดย Host หรือ Admin |
-| **Video Selection** | `video:change` | Host -> Server | `{ roomId, sourceType, youtubeId?, fileUrl?, title }` | Host สั่งเปลี่ยนวิดีโอ (YouTube หรือ Local file) |
-| | `video:update` | Server -> Room | `{ mediaId, sourceType, youtubeId?, fileUrl?, title }` | กระจายวิดีโอใหม่ให้ทุกคนในห้องสลับเครื่องเล่นพร้อมกัน |
-| **Playback Sync** | `video:control` | Host -> Server | `{ roomId, action, currentTime, speed?, volume? }` | Host สั่งควบคุม (action: `play`, `pause`, `seek`, `ratechange`) |
-| | `video:sync` | Server -> Viewers | `{ action, currentTime, speed, timestamp }` | Broadcast คำสั่งให้เฉพาะฝั่ง Viewers ซิงค์เวลาตามทันที |
+| | `room:user-left` | Server -> Room | `{ userId, displayName }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนออกไป หรือหลุดการเชื่อมต่อ |
+| | `room:end` | Host/Admin -> Server | `{ roomId, reason? }` | Host หรือ Admin ส่งคำขอสั่งปิดห้องสตรีม |
+| | `room:ended` | Server -> Room | `{ roomId, reason }` | แจ้งเตือนทุกคนในห้องเมื่อห้องถูกปิด และบังคับให้ออกจากห้อง |
+| **Video Selection** | `video:change` | Host/Admin -> Server | `{ roomId, sourceType, youtubeId?, fileUrl?, title?, mediaId? }` | Host สั่งเปลี่ยนวิดีโอ (YouTube หรือ Local file) บันทึกลง Redis และ MariaDB |
+| | `video:update` | Server -> Room | `{ mediaId?, sourceType, youtubeId?, fileUrl?, title }` | กระจายวิดีโอใหม่ให้ทุกคนในห้องสลับเครื่องเล่นพร้อมกัน |
+| **Playback Sync** | `video:control` | Host/Admin -> Server | `{ roomId, action, currentTime, speed?, volume? }` | Host สั่งควบคุม (action: `'play'`, `'pause'`, `'seek'`, `'ratechange'`) |
+| | `video:sync` | Server -> Viewers | `{ action, currentTime, speed, timestamp }` | Broadcast คำสั่งให้เฉพาะฝั่ง Viewers ซิงค์เวลาตาม Host ทันที |
 | **Live Chat** | `chat:send` | Client -> Server | `{ roomId, message }` | ผู้ใช้ส่งข้อความแชทในห้อง |
-| | `chat:new-message` | Server -> Room | `{ id, senderId, senderName, avatarUrl?, message, messageType, createdAt }` | กระจายข้อความใหม่ให้ทุกคนในห้องเห็นทันที |
-| **System & Error** | `error` | Server -> Client | `{ code, message }` | ส่งข้อความแจ้งเตือนเมื่อเกิดข้อผิดพลาด (เช่น รหัสผ่านผิด, ติด Rate Limit แชท) |
+| | `chat:new-message` | Server -> Room | `{ id, senderId, senderName, avatarUrl?, message, messageType, createdAt }` | กระจายข้อความใหม่ให้ทุกคนในห้องเห็นทันที (บันทึกลง Redis Capped List 100 ข้อความ) |
+| | `chat:error` | Server -> Client | `{ message }` | แจ้งเตือนผู้ส่งเมื่อส่งข้อความถี่เกินไป (< 1 วินาที) |
+| **System & Error** | `error` | Server -> Client | `{ code, message }` | ส่งข้อความแจ้งเตือนเมื่อเกิดข้อผิดพลาด (เช่น `UNAUTHORIZED`, `INVALID_ROOM_ID`, `ROOM_NOT_FOUND`, `FORBIDDEN`, `ROOM_FULL`, `PASSCODE_REQUIRED`, `INVALID_PASSCODE`, `CHAT_RATE_LIMIT`, `CHAT_EMPTY`) |
+
+---
+
+## 🌐 สเปกของ RESTful API (REST API Endpoints Specification)
+
+ระบบ Backend พัฒนาด้วย **Hono** รองรับการเรียกใช้งานผ่าน RESTful API โดยมีข้อกำหนดความปลอดภัยดังนี้:
+- **Authentication Header:** สำหรับ Endpoint ที่ต้องการยืนยันตัวตน ต้องแนบ Header: `Authorization: Bearer <AccessToken>`
+- **Admin Access:** Endpoint ในหมวดหมู่ `/admin` สงวนสิทธิ์เฉพาะผู้ใช้ที่มี Role เป็น `'admin'` เท่านั้น (หากไม่ใช่จะตอบกลับ `403 Forbidden`)
+
+### 1. การยืนยันตัวตนและการจัดการสิทธิ์ (`/auth`)
+
+| Method | Endpoint | สิทธิ์ (Auth) | Request Body / Parameters | Response Status | Response Body (ตัวอย่าง) | คำอธิบาย |
+| :---: | :--- | :---: | :--- | :---: | :--- | :--- |
+| `POST` | `/auth/register` | Public | `{ username, email, password, displayName }` | `201 Created` | `{ message: "Registration successful." }` | สมัครสมาชิกใหม่ (ดึง Avatar จาก Gravatar) |
+| `POST` | `/auth/login` | Public | `{ username, password }` | `200 OK` | `{ message: "Login successful", accessToken, refreshToken }` | เข้าสู่ระบบด้วย username หรือ email |
+| `POST` | `/auth/refresh` | Public | `{ refreshToken }` | `200 OK` | `{ accessToken, refreshToken }` | ขอ Access Token และ Refresh Token ชุดใหม่ |
+
+---
+
+### 2. ข้อมูลโปรไฟล์ผู้ใช้งาน (`/users`)
+
+| Method | Endpoint | สิทธิ์ (Auth) | Request Body / Parameters | Response Status | Response Body (ตัวอย่าง) | คำอธิบาย |
+| :---: | :--- | :---: | :--- | :---: | :--- | :--- |
+| `GET` | `/users/me` | User / Admin | - | `200 OK` | `{ id, username, email, displayName, avatarUrl, role }` | ดึงข้อมูลโปรไฟล์ของตนเอง |
+| `PATCH` | `/users/me` | User / Admin | `{ displayName?, avatarUrl? }` | `200 OK` | `{ message: "Profile updated successfully" }` | แก้ไขข้อมูลชื่อหรือรูปโปรไฟล์ (ลบแคช Redis) |
+| `PATCH` | `/users/me/password` | User / Admin | `{ currentPassword, newPassword }` | `200 OK` | `{ message: "Password updated successfully" }` | เปลี่ยนรหัสผ่านใหม่ (ตรวจสอบรหัสผ่านเดิม) |
+| `POST` | `/users/logout` | User / Admin | - | `200 OK` | `{ message: "Logged out successfully" }` | ออกจากระบบและล้างแคชผู้ใช้บน Redis |
+
+---
+
+### 3. การจัดการห้องสตรีมมิ่ง (`/rooms`)
+
+| Method | Endpoint | สิทธิ์ (Auth) | Request Body / Parameters | Response Status | Response Body (ตัวอย่าง) | คำอธิบาย |
+| :---: | :--- | :---: | :--- | :---: | :--- | :--- |
+| `GET` | `/rooms` | User / Admin | Query: `search?`, `mediaType?` (`all`, `none`, `youtube`, `local_file`) | `200 OK` | `{ rooms: [...], filters: { search, mediaType } }` | ดึงรายการห้องที่กำลังเปิดใช้งาน (Active Rooms) พร้อมจำนวนผู้ชม |
+| `POST` | `/rooms` | User / Admin | `{ title, description?, isPrivate?, passcode?, maxParticipants?, mediaType? }` | `201 Created` | `{ message: "Room created successfully", room: {...} }` | สร้างห้องใหม่ สุ่ม `room_code` 8 หลัก และเริ่มต้น Redis Playback State |
+| `GET` | `/rooms/code/:code` | User / Admin | Param: `code` (8 หลัก) | `200 OK` | `{ room: {...} }` | ค้นหาและดึงข้อมูลห้องด้วย Unique Room Code 8 หลัก |
+| `GET` | `/rooms/:id` | User / Admin | Param: `id` (Room ID) | `200 OK` | `{ room: {...} }` | ดึงข้อมูลรายละเอียดห้องตาม Room ID |
+| `POST` | `/rooms/:id/verify-passcode` | User / Admin | `{ passcode }` | `200 OK` | `{ verified: true, roomId }` | ตรวจสอบรหัสผ่านของห้องส่วนตัว (Private Room) |
+| `PATCH` | `/rooms/:id` | Host / Admin | `{ title?, description?, maxParticipants?, isPrivate?, passcode? }` | `200 OK` | `{ message: "Room updated successfully", room: {...} }` | แก้ไขการตั้งค่าห้อง (เฉพาะ Host หรือ Admin) |
+| `POST` | `/rooms/:id/end` | Host / Admin | Param: `id` (Room ID) | `200 OK` | `{ message: "Room ended successfully", roomId, endedAt }` | สั่งปิดห้อง อัปเดต DB เคลียร์ Redis และส่ง Socket `room:ended` |
+| `GET` | `/rooms/:id/playback` | User / Admin | Param: `id` (Room ID) | `200 OK` | `{ roomId, playbackState: {...} }` | ดึงสถานะการเล่นวิดีโอปัจจุบันแบบ In-Memory จาก Redis |
+| `GET` | `/rooms/:id/participants` | User / Admin | Param: `id` (Room ID) | `200 OK` | `{ roomId, count, participants: [...] }` | ดึงรายชื่อและจำนวนผู้ใช้ที่กำลังออนไลน์ในห้องจาก Redis |
+| `GET` | `/rooms/:id/messages` | User / Admin | Param: `id` (Room ID) | `200 OK` | `{ roomId, messages: [...] }` | ดึงประวัติข้อความแชทล่าสุด (สูงสุด 100 ข้อความ) จาก Redis |
+
+---
+
+### 4. การจัดการสื่อวิดีโอและการสตรีม (`/media`)
+
+| Method | Endpoint | สิทธิ์ (Auth) | Request Body / Parameters | Response Status | Response Body (ตัวอย่าง) | คำอธิบาย |
+| :---: | :--- | :---: | :--- | :---: | :--- | :--- |
+| `GET` | `/media/stream/:filename` | Public | Param: `filename`, Header: `Range: bytes=start-end` | `206 Partial Content` / `200 OK` | Binary Video Stream (`video/mp4`, `video/webm`) | สตรีมไฟล์วิดีโอสาธารณะ รองรับ HTTP Range Request สำหรับแท็ก `<video>` |
+| `POST` | `/media/upload` | User / Admin | Multipart Form: `file` (.mp4, .webm <= 500MB) | `201 Created` | `{ message: "File uploaded successfully", mediaId, title, fileUrl, ... }` | อัปโหลดไฟล์วิดีโอผ่าน Stream Pipeline และจำกัดขนาดไม่เกิน 500MB |
+| `POST` | `/media/youtube` | User / Admin | `{ url, title? }` | `201 Created` | `{ message: "YouTube media added successfully", mediaId, youtubeVideoId, ... }` | สกัด Video ID จาก URL YouTube และบันทึกลงในระบบ |
+| `GET` | `/media` | User / Admin | Query: `sourceType?` (`youtube`, `local_file`) | `200 OK` | `[ MediaInterface, ... ]` | ดึงรายการสื่อทั้งหมดที่บันทึกในระบบ |
+| `GET` | `/media/:id` | User / Admin | Param: `id` (Media ID) | `200 OK` | `{ id, uploaderId, sourceType, title, sourceUrl, ... }` | ดึงข้อมูลรายละเอียดของสื่อตาม ID |
+| `DELETE` | `/media/:id` | Uploader / Admin | Param: `id` (Media ID) | `200 OK` | `{ message: "Media deleted successfully", mediaId }` | ลบข้อมูลสื่อออกจากระบบ และลบไฟล์จริงออกจาก Storage หากเป็น local_file |
+
+---
+
+### 5. การจัดการระบบสำหรับผู้ดูแลระบบ (`/admin`)
+
+| Method | Endpoint | สิทธิ์ (Auth) | Request Body / Parameters | Response Status | Response Body (ตัวอย่าง) | คำอธิบาย |
+| :---: | :--- | :---: | :--- | :---: | :--- | :--- |
+| `GET` | `/admin/stats` | Admin Only | - | `200 OK` | `{ stats: { activeRoomsCount, totalUsersCount, totalMediaFilesCount, totalStorageSizeBytes } }` | สรุปภาพรวมสถิติระบบและขนาดพื้นที่จัดเก็บไฟล์ |
+| `GET` | `/admin/users` | Admin Only | - | `200 OK` | `{ users: [ UserSafeDTO, ... ] }` | ดึงรายชื่อผู้ใช้ทั้งหมดในระบบ |
+| `PATCH` | `/admin/users/:id/role` | Admin Only | `{ role: 'user' \| 'admin' }` | `200 OK` | `{ message: "User role updated successfully", userId, role }` | ปรับเปลี่ยนระดับสิทธิ์ของผู้ใช้ (ล้างแคช Redis อัตโนมัติ) |
+| `DELETE` | `/admin/users/:id` | Admin Only | Param: `id` (User ID) | `200 OK` | `{ message: "User suspended successfully", userId }` | ระงับหรือลบบัญชีผู้ใช้งานออกจากระบบ |
+| `GET` | `/admin/rooms` | Admin Only | - | `200 OK` | `{ rooms: [ RoomSafeDTO, ... ] }` | ดึงประวัติห้องสตรีมมิ่งทั้งหมดในระบบ |
+| `POST` | `/admin/rooms/:id/end` | Admin Only | Param: `id` (Room ID) | `200 OK` | `{ message: "Room terminated by administrator", roomId, endedAt }` | ผู้ดูแลระบบสั่งปิดห้องที่ละเมิดข้อกำหนดทันที |
+| `GET` | `/admin/media` | Admin Only | - | `200 OK` | `{ media: [ MediaInterface, ... ] }` | ดึงรายการไฟล์สื่อวิดีโอทั้งหมดที่อัปโหลดในระบบ |
+| `DELETE` | `/admin/media/:id` | Admin Only | Param: `id` (Media ID) | `200 OK` | `{ message: "Media deleted by administrator", mediaId }` | ผู้ดูแลระบบสั่งลบไฟล์มีเดียออกจากระบบและดิสก์ |
+| `POST` | `/admin/media/cleanup` | Admin Only | - | `200 OK` | `{ message: "Storage cleanup completed", reclaimedFilesCount, reclaimedSizeBytes }` | สแกนและลบไฟล์ขยะที่ตกค้างบนดิสก์และไม่มีในฐานข้อมูล คืนพื้นที่จัดเก็บ |
