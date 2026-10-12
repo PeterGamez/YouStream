@@ -2,8 +2,7 @@ import { Hono } from "hono";
 import type { BlankEnv, BlankSchema } from "hono/types";
 
 import type Server from "../Server";
-import Gravatar from "../integrations/Gravatar";
-import type { RoomMediaType, RoomSafeDTO } from "../interfaces/Database";
+import type { RoomHostDTO, RoomMediaType, RoomSafeDTO } from "../interfaces/Database";
 import type { RouteInterface } from "../interfaces/Route";
 import type { RoomType } from "../interfaces/Type";
 import RoomModel from "../models/RoomModel";
@@ -31,7 +30,7 @@ export default class RoomRoute implements RouteInterface {
                 const search = (c.req.query("search") || "").trim().toLowerCase();
                 const mediaType = c.req.query("mediaType") || "all";
 
-                const activeRooms = await RoomModel.selectActiveRooms();
+                const activeRooms = await RoomModel.selectActiveRoomsWithHost();
                 const filteredRooms = activeRooms.filter((r) => {
                     if (search) {
                         const titleMatch = (r.title || "").toLowerCase().includes(search);
@@ -46,30 +45,8 @@ export default class RoomRoute implements RouteInterface {
                     return true;
                 });
 
-                const hostIds = Array.from(new Set(filteredRooms.map((r) => r.hostId).filter(Boolean)));
-                let hostMap = new Map();
-                try {
-                    const hostUsers = await UserModel.selectUsersByIds(hostIds);
-                    hostMap = new Map(hostUsers.map((u) => [u.id, u]));
-                } catch {
-                    // ignore host lookup error
-                }
-
                 const roomsWithDetails = await Promise.all(
                     filteredRooms.map(async (room) => {
-                        const hostUser = hostMap.get(room.hostId);
-                        const host = hostUser
-                            ? {
-                                  id: hostUser.id,
-                                  displayName: hostUser.displayName,
-                                  avatarUrl: hostUser.avatarUrl,
-                              }
-                            : {
-                                  id: room.hostId,
-                                  displayName: "Host",
-                                  avatarUrl: Gravatar.getDefaultAvatarURL(),
-                              };
-
                         let participantCount = 0;
                         try {
                             participantCount = await RoomStateService.getParticipantCount(room.id);
@@ -77,13 +54,13 @@ export default class RoomRoute implements RouteInterface {
                             // ignore redis error
                         }
 
-                        const safeRoom: RoomSafeDTO & { host: typeof host; participantCount: number } = {
+                        const safeRoom: RoomSafeDTO & { host: RoomHostDTO; participantCount: number } = {
                             id: room.id,
                             roomCode: room.roomCode,
                             title: room.title,
                             description: room.description,
                             hostId: room.hostId,
-                            host,
+                            host: room.host,
                             status: room.status,
                             mediaType: room.mediaType,
                             currentMediaId: room.currentMediaId,
