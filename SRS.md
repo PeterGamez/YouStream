@@ -594,8 +594,8 @@ erDiagram
 | :---: | :--- | :---: | :--- | :---: | :--- | :--- |
 | `GET` | `/admin/stats` | Admin Only | - | `200 OK` | `{ stats: { activeRoomsCount, totalUsersCount, totalMediaFilesCount, totalStorageSizeBytes } }` | สรุปภาพรวมสถิติระบบและขนาดพื้นที่จัดเก็บไฟล์ |
 | `GET` | `/admin/users` | Admin Only | - | `200 OK` | `{ users: [ UserSafeDTO, ... ] }` | ดึงรายชื่อผู้ใช้ทั้งหมดในระบบ |
-| `PATCH` | `/admin/users/:id/role` | Admin Only | `{ role: 'user' \| 'admin' }` | `200 OK` | `{ message: "User role updated successfully", userId, role }` | ปรับเปลี่ยนระดับสิทธิ์ของผู้ใช้ (ล้างแคช Redis อัตโนมัติ) |
-| `DELETE` | `/admin/users/:id` | Admin Only | Param: `id` (User ID) | `200 OK` | `{ message: "User suspended successfully", userId }` | ระงับหรือลบบัญชีผู้ใช้งานออกจากระบบ |
+| `PATCH` | `/admin/users/:id/role` | Admin Only | `{ role: 'user' \| 'admin' }` | `200 OK` | `{ message: "User role updated successfully", userId, role }` | ปรับเปลี่ยนระดับสิทธิ์ของผู้ใช้ (ป้องกัน Admin เปลี่ยนสิทธิ์ตนเอง, ล้างแคช Redis อัตโนมัติ) |
+| `DELETE` | `/admin/users/:id` | Admin Only | Param: `id` (User ID) | `200 OK` | `{ message: "User suspended successfully", userId }` | ระงับ/ลบบัญชีผู้ใช้ (ป้องกัน Admin ลบบัญชีตนเอง, ปิดและเคลียร์ห้องที่เปิดอยู่ทั้งหมดอัตโนมัติ) |
 | `GET` | `/admin/rooms` | Admin Only | - | `200 OK` | `{ rooms: [ RoomSafeDTO, ... ] }` | ดึงประวัติห้องสตรีมมิ่งทั้งหมดในระบบ |
 | `POST` | `/admin/rooms/:id/end` | Admin Only | Param: `id` (Room ID) | `200 OK` | `{ message: "Room terminated by administrator", roomId, endedAt }` | ผู้ดูแลระบบสั่งปิดห้องที่ละเมิดข้อกำหนดทันที |
 | `GET` | `/admin/media` | Admin Only | - | `200 OK` | `{ media: [ MediaInterface, ... ] }` | ดึงรายการไฟล์สื่อวิดีโอทั้งหมดที่อัปโหลดในระบบ |

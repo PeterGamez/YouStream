@@ -113,6 +113,17 @@ export default class RoomModel {
         }
     }
 
+    public static async selectActiveRoomsByHost(hostId: number): Promise<RoomInterface[]> {
+        const sql = `SELECT * FROM ${this.table} WHERE host_id = ? AND status = 'active' ORDER BY id DESC`;
+        const connection = await this.DB.getConnection();
+        try {
+            const [rows] = await connection.execute<RoomRawInterface[]>(sql, [hostId]);
+            return rows.map((row) => this.mapRowToRoom(row)).filter((r): r is RoomInterface => r !== null);
+        } finally {
+            connection.release();
+        }
+    }
+
     public static async selectActiveRoomsWithHost(): Promise<(RoomInterface & { host: RoomHostDTO })[]> {
         const sql = `
             SELECT 
