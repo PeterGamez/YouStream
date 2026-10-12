@@ -107,7 +107,7 @@ export default class RoomSocket {
                 }
             }
 
-            const roomKey = `room:${roomId}`;
+            const roomKey = RoomStateService.getRoomKey(roomId);
             socket.join(roomKey);
 
             await RoomStateService.setSocketSession(socket.id, userId, roomId);
@@ -179,7 +179,7 @@ export default class RoomSocket {
                 return;
             }
 
-            const roomKey = `room:${roomId}`;
+            const roomKey = RoomStateService.getRoomKey(roomId);
             socket.leave(roomKey);
 
             const userId = session?.userId || socket.data?.userId || socket.data?.user?.id;
@@ -242,7 +242,7 @@ export default class RoomSocket {
                 return;
             }
 
-            const roomKey = `room:${roomId}`;
+            const roomKey = RoomStateService.getRoomKey(roomId);
 
             const isInRoom = socket.rooms.has(roomKey) || (session && Number(session.roomId) === roomId);
             if (!isInRoom) {
@@ -306,7 +306,7 @@ export default class RoomSocket {
             this.server.log("Socket:Room", `Client disconnected: ${socket.id}`);
             const session = await RoomStateService.getSocketSession(socket.id);
             if (session) {
-                const roomKey = `room:${session.roomId}`;
+                const roomKey = RoomStateService.getRoomKey(session.roomId);
                 const participant = await RoomStateService.getParticipant(session.roomId, session.userId);
 
                 if (participant && participant.socketId === socket.id) {
@@ -330,7 +330,7 @@ export default class RoomSocket {
     }
 
     public static endRoom(roomId: number | string, reason?: string): void {
-        const roomKey = `room:${roomId}`;
+        const roomKey = RoomStateService.getRoomKey(roomId);
         this.server.log("Socket:Room", `Room ended: ${roomKey}`);
         this.io.to(roomKey).emit("room:ended", {
             roomId: Number(roomId),

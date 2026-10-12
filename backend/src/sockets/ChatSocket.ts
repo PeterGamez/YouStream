@@ -47,7 +47,7 @@ export default class ChatSocket {
                 return;
             }
 
-            const roomKey = `room:${roomId}`;
+            const roomKey = RoomStateService.getRoomKey(roomId);
 
             if (!socket.rooms.has(roomKey)) {
                 const errorPayload: SocketErrorPayload = {

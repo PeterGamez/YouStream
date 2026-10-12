@@ -53,7 +53,7 @@ export default class VideoSocket {
             const previousMediaType = room.mediaType;
             const previousMediaId = room.currentMediaId;
 
-           try {
+            try {
                 await RoomModel.updateRoomFields(roomId, {
                     mediaType: data.sourceType,
                     currentMediaId: data.mediaId ?? null,
@@ -101,8 +101,8 @@ export default class VideoSocket {
                 return;
             }
 
-            const roomKey = `room:${roomId}`;
-            this.server.log("Socket:Video", `Video changed in ${roomKey} by host ${authCheck.userId}: ${data.sourceType}`);
+            const { roomKey, userId } = authCheck;
+            this.server.log("Socket:Video", `Video changed in ${roomKey} by host ${userId}: ${data.sourceType}`);
 
             this.io.to(roomKey).emit("video:update", {
                 mediaId: data.mediaId ?? null,
@@ -129,8 +129,8 @@ export default class VideoSocket {
                 return;
             }
 
-            const roomKey = `room:${data.roomId}`;
-            this.server.log("Socket:Video", `Video control in ${roomKey} by host ${authCheck.userId}: ${data.action} at ${data.currentTime}s`);
+            const { roomKey, userId } = authCheck;
+            this.server.log("Socket:Video", `Video control in ${roomKey} by host ${userId}: ${data.action} at ${data.currentTime}s`);
 
             const isPlaying = data.action === "play" ? true : data.action === "pause" ? false : undefined;
             await RoomStateService.setPlaybackState(data.roomId, {
@@ -138,7 +138,7 @@ export default class VideoSocket {
                 ...(isPlaying !== undefined ? { isPlaying } : {}),
                 ...(data.speed !== undefined ? { playbackSpeed: data.speed } : {}),
                 ...(data.volume !== undefined ? { volume: data.volume } : {}),
-                updatedBy: authCheck.userId,
+                updatedBy: userId,
                 updatedAt: new Date().toISOString(),
             });
 
@@ -151,7 +151,7 @@ export default class VideoSocket {
         });
     }
 
-    private static async validateHost(socket: Socket, roomId: number | string): Promise<{ success: boolean; userId?: number; error?: SocketErrorPayload }> {
+    private static async validateHost(socket: Socket, roomId: number | string): Promise<{ success: boolean; userId?: number; roomKey?: string; error?: SocketErrorPayload }> {
         let userId: number = socket.data?.userId || socket.data?.user?.id;
         const session = await RoomStateService.getSocketSession(socket.id);
         if (!userId && session?.userId) {
@@ -168,7 +168,7 @@ export default class VideoSocket {
             };
         }
 
-        const roomKey = `room:${roomId}`;
+        const roomKey = RoomStateService.getRoomKey(roomId);
 
         const isInRoom = socket.rooms.has(roomKey) || (session && String(session.roomId) === String(roomId));
         if (!isInRoom) {
@@ -182,17 +182,17 @@ export default class VideoSocket {
         }
 
         if (socket.data?.user?.role === "admin") {
-            return { success: true, userId };
+            return { success: true, userId, roomKey };
         }
 
         const participant = await RoomStateService.getParticipant(roomId, userId);
         if (participant?.role === "host") {
-            return { success: true, userId };
+            return { success: true, userId, roomKey };
         }
 
         const room = await RoomModel.selectRoom(Number(roomId));
         if (room && room.hostId === userId) {
-            return { success: true, userId };
+            return { success: true, userId, roomKey };
         }
 
         return {
