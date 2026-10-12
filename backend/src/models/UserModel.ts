@@ -13,7 +13,11 @@ export default class UserModel {
         this.DB = DB;
     }
 
-    private static mapRowToUser(row: UserRawInterface): UserInterface | null {
+    public static get getTable(): string {
+        return this.table;
+    }
+
+    private static mapRowToUser(row: UserRawInterface): UserInterface  {
         if (!row) return null;
         return {
             id: row.id,
