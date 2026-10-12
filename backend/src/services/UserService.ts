@@ -1,4 +1,4 @@
-import type { UserInterface, UserRawInterface } from "../interfaces/Database";
+import type { UserInterface, UserSafeDTO } from "../interfaces/Database";
 import UserModel from "../models/UserModel";
 import RedisService from "./RedisService";
 
@@ -6,7 +6,7 @@ export default class UserService {
     private static readonly USER_CACHE_PREFIX = "user:";
     private static readonly USER_CACHE_TTL = 60;
 
-    public static async getUser(userId: number): Promise<UserInterface> {
+    public static async getUser(userId: number): Promise<UserSafeDTO> {
         const cached = await RedisService.get<string>(`${this.USER_CACHE_PREFIX}${userId}`);
         if (cached) {
             try {
@@ -15,12 +15,9 @@ export default class UserService {
                     id: raw.id,
                     username: raw.username,
                     email: raw.email,
-                    password: raw.password,
-                    displayName: raw.display_name ?? raw.displayName ?? "",
-                    avatarUrl: raw.avatar_url ?? raw.avatarUrl ?? "",
+                    displayName: raw.display_name,
+                    avatarUrl: raw.avatar_url,
                     role: raw.role,
-                    createdAt: raw.created_at ?? raw.createdAt,
-                    updatedAt: raw.updated_at ?? raw.updatedAt,
                 };
             } catch {
                 // ignore parse failure and query db
@@ -37,16 +34,13 @@ export default class UserService {
     }
 
     public static async setUser(userId: number, user: UserInterface): Promise<void> {
-        const rawUser: UserRawInterface = {
+        const rawUser: UserSafeDTO = {
             id: user.id,
             username: user.username,
             email: user.email,
-            password: user.password,
-            display_name: user.displayName,
-            avatar_url: user.avatarUrl,
+            displayName: user.displayName,
+            avatarUrl: user.avatarUrl,
             role: user.role,
-            created_at: user.createdAt,
-            updated_at: user.updatedAt,
         };
         await RedisService.set(`${this.USER_CACHE_PREFIX}${userId}`, JSON.stringify(rawUser));
         await RedisService.expire(`${this.USER_CACHE_PREFIX}${userId}`, this.USER_CACHE_TTL);

@@ -1,6 +1,6 @@
 import type { Pool, ResultSetHeader } from "mysql2/promise";
 
-import type { MediaInterface, MediaRawInterface, MediaSourceType } from "../interfaces/Database";
+import type { CountRow, MediaInterface, MediaRawInterface, MediaSourceType } from "../interfaces/Database";
 import type { MediaType } from "../interfaces/Type";
 
 export default class MediaModel {
@@ -67,8 +67,8 @@ export default class MediaModel {
         const sql = `SELECT * FROM ${this.table} WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [id]);
-            return this.mapRowToMedia((rows as any[])[0]);
+            const [rows] = await connection.execute<MediaRawInterface[]>(sql, [id]);
+            return this.mapRowToMedia(rows[0]);
         } finally {
             connection.release();
         }
@@ -78,8 +78,8 @@ export default class MediaModel {
         const sql = `SELECT * FROM ${this.table} ORDER BY id ASC`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql);
-            return (rows as any[]).map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
+            const [rows] = await connection.execute<MediaRawInterface[]>(sql);
+            return rows.map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
         } finally {
             connection.release();
         }
@@ -89,8 +89,8 @@ export default class MediaModel {
         const sql = `SELECT * FROM ${this.table} WHERE uploader_id = ? ORDER BY id DESC`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [uploaderId]);
-            return (rows as any[]).map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
+            const [rows] = await connection.execute<MediaRawInterface[]>(sql, [uploaderId]);
+            return rows.map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
         } finally {
             connection.release();
         }
@@ -100,8 +100,8 @@ export default class MediaModel {
         const sql = `SELECT * FROM ${this.table} WHERE source_type = ? ORDER BY id DESC`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [sourceType]);
-            return (rows as any[]).map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
+            const [rows] = await connection.execute<MediaRawInterface[]>(sql, [sourceType]);
+            return rows.map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
         } finally {
             connection.release();
         }
@@ -111,8 +111,8 @@ export default class MediaModel {
         const sql = `SELECT * FROM ${this.table} WHERE youtube_video_id = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [youtubeVideoId]);
-            return this.mapRowToMedia((rows as any[])[0]);
+            const [rows] = await connection.execute<MediaRawInterface[]>(sql, [youtubeVideoId]);
+            return this.mapRowToMedia(rows[0]);
         } finally {
             connection.release();
         }
@@ -122,8 +122,8 @@ export default class MediaModel {
         const sql = `SELECT COUNT(*) as count FROM ${this.table} WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [id]);
-            return Number((rows as any[])[0].count) > 0;
+            const [rows] = await connection.execute<CountRow[]>(sql, [id]);
+            return Number(rows[0]?.count) > 0;
         } finally {
             connection.release();
         }

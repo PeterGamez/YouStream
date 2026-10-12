@@ -1,7 +1,7 @@
 import type { Pool, ResultSetHeader } from "mysql2/promise";
 
 import Gravatar from "../integrations/Gravatar";
-import type { UserInterface, UserRawInterface } from "../interfaces/Database";
+import type { CountRow, UserInterface, UserRawInterface } from "../interfaces/Database";
 import type { UserType } from "../interfaces/Type";
 
 export default class UserModel {
@@ -60,8 +60,8 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [id]);
-            return this.mapRowToUser((rows as any[])[0]);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql, [id]);
+            return this.mapRowToUser(rows[0]);
         } finally {
             connection.release();
         }
@@ -73,8 +73,8 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} WHERE id IN (${placeholders})`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, ids);
-            return (rows as any[]).map((row) => this.mapRowToUser(row)).filter((u): u is UserInterface => u !== null);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql, ids);
+            return rows.map((row) => this.mapRowToUser(row)).filter((u): u is UserInterface => u !== null);
         } finally {
             connection.release();
         }
@@ -84,8 +84,8 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} ORDER BY id ASC`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql);
-            return (rows as any[]).map((row) => this.mapRowToUser(row)).filter((u): u is UserInterface => u !== null);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql);
+            return rows.map((row) => this.mapRowToUser(row)).filter((u): u is UserInterface => u !== null);
         } finally {
             connection.release();
         }
@@ -95,8 +95,8 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} WHERE (username = ? OR email = ?)`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [user, user]);
-            return this.mapRowToUser((rows as any[])[0]);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql, [user, user]);
+            return this.mapRowToUser(rows[0]);
         } finally {
             connection.release();
         }
@@ -106,8 +106,8 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} WHERE username = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [username]);
-            return this.mapRowToUser((rows as any[])[0]);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql, [username]);
+            return this.mapRowToUser(rows[0]);
         } finally {
             connection.release();
         }
@@ -117,8 +117,8 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} WHERE email = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [email]);
-            return this.mapRowToUser((rows as any[])[0]);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql, [email]);
+            return this.mapRowToUser(rows[0]);
         } finally {
             connection.release();
         }
@@ -129,8 +129,8 @@ export default class UserModel {
 
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [username, email]);
-            return Number((rows as any[])[0].count) > 0;
+            const [rows] = await connection.execute<CountRow[]>(sql, [username, email]);
+            return Number(rows[0]?.count) > 0;
         } finally {
             connection.release();
         }

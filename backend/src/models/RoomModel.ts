@@ -1,7 +1,7 @@
 import type { Pool, ResultSetHeader } from "mysql2/promise";
 
 import Gravatar from "../integrations/Gravatar";
-import type { RoomHostDTO, RoomInterface, RoomMediaType, RoomRawInterface } from "../interfaces/Database";
+import type { CountRow, RoomHostDTO, RoomInterface, RoomMediaType, RoomRawInterface, RoomWithHostRow } from "../interfaces/Database";
 import type { RoomType } from "../interfaces/Type";
 import UserModel from "./UserModel";
 
@@ -73,8 +73,8 @@ export default class RoomModel {
         const sql = `SELECT * FROM ${this.table} WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [id]);
-            return this.mapRowToRoom((rows as any[])[0]);
+            const [rows] = await connection.execute<RoomRawInterface[]>(sql, [id]);
+            return this.mapRowToRoom(rows[0]);
         } finally {
             connection.release();
         }
@@ -84,8 +84,8 @@ export default class RoomModel {
         const sql = `SELECT * FROM ${this.table} ORDER BY id ASC`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql);
-            return (rows as any[]).map((row) => this.mapRowToRoom(row)).filter((r): r is RoomInterface => r !== null);
+            const [rows] = await connection.execute<RoomRawInterface[]>(sql);
+            return rows.map((row) => this.mapRowToRoom(row)).filter((r): r is RoomInterface => r !== null);
         } finally {
             connection.release();
         }
@@ -95,8 +95,8 @@ export default class RoomModel {
         const sql = `SELECT * FROM ${this.table} WHERE room_code = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [roomCode]);
-            return this.mapRowToRoom((rows as any[])[0]);
+            const [rows] = await connection.execute<RoomRawInterface[]>(sql, [roomCode]);
+            return this.mapRowToRoom(rows[0]);
         } finally {
             connection.release();
         }
@@ -106,8 +106,8 @@ export default class RoomModel {
         const sql = `SELECT * FROM ${this.table} WHERE status = 'active' ORDER BY id DESC`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql);
-            return (rows as any[]).map((row) => this.mapRowToRoom(row)).filter((r): r is RoomInterface => r !== null);
+            const [rows] = await connection.execute<RoomRawInterface[]>(sql);
+            return rows.map((row) => this.mapRowToRoom(row)).filter((r): r is RoomInterface => r !== null);
         } finally {
             connection.release();
         }
@@ -126,8 +126,8 @@ export default class RoomModel {
         `;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql);
-            return (rows as any[])
+            const [rows] = await connection.execute<RoomWithHostRow[]>(sql);
+            return rows
                 .map((row) => {
                     const room = this.mapRowToRoom(row);
                     if (!room) return null;
@@ -151,8 +151,8 @@ export default class RoomModel {
         const sql = `SELECT COUNT(*) as count FROM ${this.table} WHERE room_code = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [roomCode]);
-            return Number((rows as any[])[0].count) > 0;
+            const [rows] = await connection.execute<CountRow[]>(sql, [roomCode]);
+            return Number(rows[0]?.count) > 0;
         } finally {
             connection.release();
         }
