@@ -11,6 +11,7 @@ import MediaModel from "../models/MediaModel";
 import RoomModel from "../models/RoomModel";
 import UserModel from "../models/UserModel";
 import RoomStateService from "../services/RoomStateService";
+import SocketService from "../services/SocketService";
 import UserService from "../services/UserService";
 import RoomSocket from "../sockets/RoomSocket";
 
@@ -117,6 +118,7 @@ export default class AdminRoute implements RouteInterface {
 
                 await UserModel.updateUser(id, "role", role);
                 await UserService.delUser(id);
+                await SocketService.revokeUserSockets(id, "User role was changed by administrator");
 
                 this.server.log("Admin Route", `Updated role for user ${id} to ${role}`);
 
@@ -185,6 +187,7 @@ export default class AdminRoute implements RouteInterface {
 
                 await UserModel.deleteUser(id);
                 await UserService.delUser(id);
+                await SocketService.revokeUserSockets(id, "User account was suspended by administrator");
 
                 this.server.log("Admin Route", `User ${id} suspended/deleted by admin`);
 
