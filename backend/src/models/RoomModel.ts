@@ -162,7 +162,8 @@ export default class RoomModel {
 
         for (const [key, val] of Object.entries(fields)) {
             if (val !== undefined) {
-                const col = columnMap[key] || key;
+                const col = columnMap[key];
+                if (!col) continue;
                 updates.push(`${col} = ?`);
                 values.push(val);
             }
