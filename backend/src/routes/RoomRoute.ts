@@ -83,8 +83,9 @@ export default class RoomRoute implements RouteInterface {
                         mediaType,
                     },
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get /rooms error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get /rooms error: ${message}`);
                 return c.json({ error: "Failed to retrieve rooms" }, 500);
             }
         });
@@ -154,8 +155,9 @@ export default class RoomRoute implements RouteInterface {
                         updatedBy: user.id,
                         updatedAt: new Date().toISOString(),
                     });
-                } catch (redisErr: any) {
-                    this.server.warn("Room Route", `Redis init error for room ${roomId}: ${redisErr?.message || redisErr}`);
+                } catch (redisErr) {
+                    const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+                    this.server.warn("Room Route", `Redis init error for room ${roomId}: ${redisMsg}`);
                 }
 
                 const createdRoom = await RoomModel.selectRoom(roomId);
@@ -184,8 +186,9 @@ export default class RoomRoute implements RouteInterface {
                     },
                     201
                 );
-            } catch (error: any) {
-                this.server.error("Room Route", `Post /rooms error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Post /rooms error: ${message}`);
                 return c.json({ error: "Failed to create room" }, 500);
             }
         });
@@ -242,8 +245,9 @@ export default class RoomRoute implements RouteInterface {
                 };
 
                 return c.json({ room: safeRoom });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get /rooms/code/:code error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get /rooms/code/:code error: ${message}`);
                 return c.json({ error: "Failed to retrieve room by code" }, 500);
             }
         });
@@ -300,8 +304,9 @@ export default class RoomRoute implements RouteInterface {
                 };
 
                 return c.json({ room: safeRoom });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get /rooms/:id error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get /rooms/:id error: ${message}`);
                 return c.json({ error: "Failed to retrieve room" }, 500);
             }
         });
@@ -340,8 +345,9 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 return c.json({ verified: true, roomId: room.id });
-            } catch (error: any) {
-                this.server.error("Room Route", `Verify passcode error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Verify passcode error: ${message}`);
                 return c.json({ error: "Failed to verify room passcode" }, 500);
             }
         });
@@ -450,8 +456,9 @@ export default class RoomRoute implements RouteInterface {
                     message: "Room updated successfully",
                     room: safeRoom,
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `Update room error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Update room error: ${message}`);
                 return c.json({ error: "Failed to update room" }, 500);
             }
         });
@@ -481,14 +488,16 @@ export default class RoomRoute implements RouteInterface {
 
                 try {
                     await RoomStateService.cleanupRoom(id);
-                } catch (redisErr: any) {
-                    this.server.warn("Room Route", `Redis cleanup error for room ${id}: ${redisErr?.message || redisErr}`);
+                } catch (redisErr) {
+                    const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+                    this.server.warn("Room Route", `Redis cleanup error for room ${id}: ${redisMsg}`);
                 }
 
                 try {
                     RoomSocket.endRoom(id, "Room has been ended by the host");
-                } catch (socketErr: any) {
-                    this.server.warn("Room Route", `Socket endRoom emit error: ${socketErr?.message || socketErr}`);
+                } catch (socketErr) {
+                    const socketMsg = socketErr instanceof Error ? socketErr.message : String(socketErr);
+                    this.server.warn("Room Route", `Socket endRoom emit error: ${socketMsg}`);
                 }
 
                 this.server.log("Room Route", `Room ${id} ended by user ${user.id}`);
@@ -498,8 +507,9 @@ export default class RoomRoute implements RouteInterface {
                     roomId: id,
                     endedAt: new Date().toISOString(),
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `End room error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `End room error: ${message}`);
                 return c.json({ error: "Failed to end room" }, 500);
             }
         });
@@ -530,8 +540,9 @@ export default class RoomRoute implements RouteInterface {
                     roomId: id,
                     playbackState,
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get playback error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get playback error: ${message}`);
                 return c.json({ error: "Failed to retrieve playback state" }, 500);
             }
         });
@@ -550,8 +561,9 @@ export default class RoomRoute implements RouteInterface {
                     count: participants.length,
                     participants,
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get participants error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get participants error: ${message}`);
                 return c.json({ error: "Failed to retrieve room participants" }, 500);
             }
         });
@@ -569,8 +581,9 @@ export default class RoomRoute implements RouteInterface {
                     roomId: id,
                     messages,
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get messages error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get messages error: ${message}`);
                 return c.json({ error: "Failed to retrieve room messages" }, 500);
             }
         });

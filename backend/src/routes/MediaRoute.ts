@@ -118,8 +118,9 @@ export default class MediaRoute implements RouteInterface {
                         },
                     });
                 }
-            } catch (error: any) {
-                this.server.error("Media Route", `Stream error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Media Route", `Stream error: ${message}`);
                 return c.json({ error: "Failed to stream media" }, 500);
             }
         });
@@ -179,9 +180,10 @@ export default class MediaRoute implements RouteInterface {
                     const writeStream = createWriteStream(targetPath);
                     try {
                         await pipeline(Readable.fromWeb(file.stream()), sizeLimiter, writeStream);
-                    } catch (streamError: any) {
+                    } catch (streamError) {
+                        const streamMsg = streamError instanceof Error ? streamError.message : String(streamError);
                         await unlink(targetPath).catch(() => {});
-                        if (bytesWritten > MediaRoute.MAX_FILE_SIZE || streamError?.message?.includes("exceeds")) {
+                        if (bytesWritten > MediaRoute.MAX_FILE_SIZE || streamMsg.includes("exceeds")) {
                             return c.json({ error: "File exceeds maximum size limit of 500MB" }, 413);
                         }
                         throw streamError;
@@ -205,8 +207,9 @@ export default class MediaRoute implements RouteInterface {
                         },
                         201
                     );
-                } catch (error: any) {
-                    this.server.error("Media Route", `Upload error: ${error?.message || error}`);
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    this.server.error("Media Route", `Upload error: ${message}`);
                     return c.json({ error: "Failed to upload file" }, 500);
                 }
             }
@@ -255,8 +258,9 @@ export default class MediaRoute implements RouteInterface {
                     },
                     201
                 );
-            } catch (error: any) {
-                this.server.error("Media Route", `Add YouTube error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Media Route", `Add YouTube error: ${message}`);
                 return c.json({ error: "Failed to add YouTube video" }, 500);
             }
         });
@@ -273,8 +277,9 @@ export default class MediaRoute implements RouteInterface {
                 }
 
                 return c.json(mediaList);
-            } catch (error: any) {
-                this.server.error("Media Route", `Get /media error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Media Route", `Get /media error: ${message}`);
                 return c.json({ error: "Failed to retrieve media list" }, 500);
             }
         });
@@ -292,8 +297,9 @@ export default class MediaRoute implements RouteInterface {
                 }
 
                 return c.json(media);
-            } catch (error: any) {
-                this.server.error("Media Route", `Get /media/:id error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Media Route", `Get /media/:id error: ${message}`);
                 return c.json({ error: "Failed to retrieve media details" }, 500);
             }
         });
@@ -322,8 +328,9 @@ export default class MediaRoute implements RouteInterface {
                 if (media.filePath && existsSync(media.filePath)) {
                     try {
                         unlinkSync(media.filePath);
-                    } catch (fsErr: any) {
-                        this.server.warn("Media Route", `Failed to unlink file ${media.filePath}: ${fsErr?.message || fsErr}`);
+                    } catch (fsErr) {
+                        const fsMsg = fsErr instanceof Error ? fsErr.message : String(fsErr);
+                        this.server.warn("Media Route", `Failed to unlink file ${media.filePath}: ${fsMsg}`);
                     }
                 }
 
@@ -335,8 +342,9 @@ export default class MediaRoute implements RouteInterface {
                     message: "Media deleted successfully",
                     mediaId: id,
                 });
-            } catch (error: any) {
-                this.server.error("Media Route", `Delete /media/:id error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Media Route", `Delete /media/:id error: ${message}`);
                 return c.json({ error: "Failed to delete media" }, 500);
             }
         });

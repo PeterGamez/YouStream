@@ -266,8 +266,9 @@ export default class RoomSocket {
             // 5. Execute room-ending operations (DB update + Redis cleanup + broadcast)
             try {
                 await RoomModel.endRoom(roomId);
-            } catch (dbErr: any) {
-                this.server.error("Socket:Room", `Failed to end room ${roomId} in database: ${dbErr?.message || dbErr}`);
+            } catch (dbErr) {
+                const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+                this.server.error("Socket:Room", `Failed to end room ${roomId} in database: ${dbMsg}`);
                 socket.emit("error", {
                     code: "INTERNAL_ERROR",
                     message: "Failed to terminate room in database",
@@ -277,8 +278,9 @@ export default class RoomSocket {
 
             try {
                 await RoomStateService.cleanupRoom(roomId);
-            } catch (redisErr: any) {
-                this.server.warn("Socket:Room", `Redis cleanup error for room ${roomId}: ${redisErr?.message || redisErr}`);
+            } catch (redisErr) {
+                const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+                this.server.warn("Socket:Room", `Redis cleanup error for room ${roomId}: ${redisMsg}`);
             }
 
             this.server.log("Socket:Room", `Room ${roomId} ended by user ${userId}`);

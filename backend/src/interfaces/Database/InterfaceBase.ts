@@ -13,5 +13,5 @@ export interface InterfaceBaseRaw extends RowDataPacket {
 }
 
 export interface CountRow extends RowDataPacket {
-    count: bigint;
+    count: number | bigint;
 }

@@ -54,8 +54,9 @@ export default class AdminRoute implements RouteInterface {
                         totalStorageSizeBytes,
                     },
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Stats error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Stats error: ${message}`);
                 return c.json({ error: "Failed to retrieve admin stats" }, 500);
             }
         });
@@ -78,8 +79,9 @@ export default class AdminRoute implements RouteInterface {
                 return c.json({
                     users: safeUsers,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Get users error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Get users error: ${message}`);
                 return c.json({ error: "Failed to retrieve users" }, 500);
             }
         });
@@ -109,7 +111,7 @@ export default class AdminRoute implements RouteInterface {
                 }
 
                 await UserModel.updateUser(id, "role", role);
-                UserService.delUser(id);
+                await UserService.delUser(id);
 
                 this.server.log("Admin Route", `Updated role for user ${id} to ${role}`);
 
@@ -118,8 +120,9 @@ export default class AdminRoute implements RouteInterface {
                     userId: id,
                     role,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Update role error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Update role error: ${message}`);
                 return c.json({ error: "Failed to update user role" }, 500);
             }
         });
@@ -137,7 +140,7 @@ export default class AdminRoute implements RouteInterface {
                 }
 
                 await UserModel.deleteUser(id);
-                UserService.delUser(id);
+                await UserService.delUser(id);
 
                 this.server.log("Admin Route", `User ${id} suspended/deleted by admin`);
 
@@ -145,8 +148,9 @@ export default class AdminRoute implements RouteInterface {
                     message: "User suspended successfully",
                     userId: id,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Delete user error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Delete user error: ${message}`);
                 return c.json({ error: "Failed to delete user" }, 500);
             }
         });
@@ -163,8 +167,9 @@ export default class AdminRoute implements RouteInterface {
                 return c.json({
                     rooms: safeRooms,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Get rooms error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Get rooms error: ${message}`);
                 return c.json({ error: "Failed to retrieve rooms" }, 500);
             }
         });
@@ -202,8 +207,9 @@ export default class AdminRoute implements RouteInterface {
                     roomId: id,
                     endedAt: new Date().toISOString(),
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `End room error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `End room error: ${message}`);
                 return c.json({ error: "Failed to terminate room" }, 500);
             }
         });
@@ -215,8 +221,9 @@ export default class AdminRoute implements RouteInterface {
                 return c.json({
                     media,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Get media error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Get media error: ${message}`);
                 return c.json({ error: "Failed to retrieve media files" }, 500);
             }
         });
@@ -249,8 +256,9 @@ export default class AdminRoute implements RouteInterface {
                     message: "Media deleted by administrator",
                     mediaId: id,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Delete media error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Delete media error: ${message}`);
                 return c.json({ error: "Failed to delete media" }, 500);
             }
         });
@@ -293,8 +301,9 @@ export default class AdminRoute implements RouteInterface {
                     reclaimedFilesCount,
                     reclaimedSizeBytes,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Storage cleanup error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Storage cleanup error: ${message}`);
                 return c.json({ error: "Failed to run storage cleanup" }, 500);
             }
         });

@@ -51,8 +51,9 @@ export default class VideoSocket {
                     mediaType: data.sourceType,
                     currentMediaId: data.mediaId ?? null,
                 });
-            } catch (dbErr: any) {
-                this.server.warn("Socket:Video", `Failed to update room ${data.roomId} media in DB: ${dbErr?.message || dbErr}`);
+            } catch (dbErr) {
+                const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+                this.server.warn("Socket:Video", `Failed to update room ${data.roomId} media in DB: ${dbMsg}`);
             }
 
             this.io.to(roomKey).emit("video:update", {

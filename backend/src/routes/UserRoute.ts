@@ -39,8 +39,9 @@ export default class UserRoute implements RouteInterface {
                 };
 
                 return c.json(userDTO);
-            } catch (error: any) {
-                this.server.error("User Route", `Get /me error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("User Route", `Get /me error: ${message}`);
                 return c.json({ error: "Failed to retrieve user profile" }, 500);
             }
         });
@@ -75,18 +76,19 @@ export default class UserRoute implements RouteInterface {
                 }
 
                 await UserModel.updateUserFields(user.id, { displayName, avatarUrl });
-                UserService.delUser(user.id);
+                await UserService.delUser(user.id);
 
                 this.server.log("User Route", `User updated profile: ${user.id} (${user.username})`);
 
                 return c.json({
                     message: "Profile updated successfully",
                 });
-            } catch (error: any) {
-                if (error?.message === "Email already in use") {
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                if (message === "Email already in use") {
                     return c.json({ error: "Email already in use" }, 409);
                 }
-                this.server.error("User Route", `Update profile error: ${error?.message || error}`);
+                this.server.error("User Route", `Update profile error: ${message}`);
                 return c.json({ error: "Failed to update profile" }, 500);
             }
         });
@@ -131,11 +133,12 @@ export default class UserRoute implements RouteInterface {
                 return c.json({
                     message: "Password updated successfully",
                 });
-            } catch (error: any) {
-                if (error?.message === "Current password is incorrect") {
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                if (message === "Current password is incorrect") {
                     return c.json({ error: "Current password is incorrect" }, 400);
                 }
-                this.server.error("User Route", `Password change error: ${error?.message || error}`);
+                this.server.error("User Route", `Password change error: ${message}`);
                 return c.json({ error: "Failed to update password" }, 500);
             }
         });
@@ -151,8 +154,9 @@ export default class UserRoute implements RouteInterface {
                 return c.json({
                     message: "Logged out successfully",
                 });
-            } catch (error: any) {
-                this.server.error("User Route", `Logout error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("User Route", `Logout error: ${message}`);
                 return c.json({ error: "Failed to log out" }, 500);
             }
         });
