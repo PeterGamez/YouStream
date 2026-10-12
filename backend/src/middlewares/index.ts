@@ -55,22 +55,12 @@ export default class Middleware {
         }
 
         const payload = c.get("jwtPayload");
-        if (!payload || !payload.userId) {
+        if (!payload?.userId) {
             return null;
         }
-        const { userId } = payload;
 
-        const user = await UserService.getUser(userId);
-        if (user) {
-            c.set("authUser", {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                displayName: user.displayName,
-                avatarUrl: user.avatarUrl,
-                role: user.role,
-            });
-        }
-        return user;
+        const userSafe = await UserService.getUser(payload.userId);
+        c.set("authUser", userSafe);
+        return userSafe;
     }
 }
