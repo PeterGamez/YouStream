@@ -154,6 +154,7 @@ sequenceDiagram
     actor Host as Host (Creator)
     participant FE_Host as Next.js (Host)
     participant BE as Hono Server + Socket.io
+    participant MariaDB as MariaDB
     participant Redis as Redis
     participant FE_Viewer as Next.js (Viewers)
     actor Viewer as Viewer
@@ -161,6 +162,7 @@ sequenceDiagram
     Host->>FE_Host: วางลิงก์ YouTube
     FE_Host->>FE_Host: สกัด Video ID จาก URL
     FE_Host->>BE: Socket Emit ('video:change', { roomId, sourceType: 'youtube', youtubeId, title })
+    BE->>MariaDB: บันทึก Current Media ลงตาราง room (media_type, current_media_id)
     BE->>Redis: แคช Current Media & Playback State บน Redis (room:{roomId}:playback)
     BE-->>FE_Host: Broadcast ('video:update', { mediaId, sourceType: 'youtube', youtubeId, title })
     BE-->>FE_Viewer: Broadcast ('video:update', { mediaId, sourceType: 'youtube', youtubeId, title })
@@ -192,6 +194,7 @@ sequenceDiagram
     BE->>MariaDB: บันทึกข้อมูลมีเดียลงตาราง media
     BE-->>FE_Host: HTTP Response 201 Created { fileUrl, mediaId, title, sourceType, fileSizeBytes, mimeType }
     FE_Host->>Socket: Socket Emit ('video:change', { roomId, sourceType: 'local_file', fileUrl, title, mediaId })
+    Socket->>MariaDB: บันทึก Current Media ลงตาราง room (media_type, current_media_id)
     Socket->>Redis: บันทึก Current Media & Playback State ลง Redis (room:{roomId}:playback)
     Socket-->>FE_Viewer: Broadcast ('video:update', { mediaId, sourceType: 'local_file', fileUrl, title })
     Note over FE_Host, FE_Viewer: แท็ก <video> ของทุกคนโหลดไฟล์สตรีมจาก fileUrl (/media/stream/:filename)
@@ -474,7 +477,9 @@ erDiagram
 - **Fields:**
   - `user_id`: `"5"`
   - `room_id`: `"101"`
-- **กลไกการทำงาน (Operations):** เมื่อ Socket หลุดการเชื่อมต่อ (Disconnect) ดึงข้อมูลด้วยคำสั่ง `HGETALL socket:{socketId}:session` เพื่อทราบ `room_id` และ `user_id` จากนั้นลบผู้ใช้ออกจากห้องด้วยคำสั่ง `HDEL` และลบคีย์ด้วยคำสั่ง `DEL` แบบ $O(1)$ โดยไม่ต้องวนลูปค้นหา
+- **กลไกการทำงาน (Operations):** เมื่อ Socket หลุดการเชื่อมต่อ (Disconnect) หรือเรียก `room:leave` ระบบดึงข้อมูลด้วยคำสั่ง `HGETALL socket:{socketId}:session` เพื่อทราบ `room_id` และ `user_id` และตรวจสอบกับ Participant ใน Redis หาก `socket_id` ตรงกัน ระบบจะสแกนหา Socket อื่นของผู้ใช้คนเดิมที่ยังเปิดอยู่ในห้องเดียวกัน (Multi-tab Support):
+  - **หากยังมีแท็บอื่นเชื่อมต่ออยู่:** จะ Re-bind อัปเดต `socket_id` ของแท็บที่เหลือลงบน Redis โดยยังไม่ลบ Participant และไม่ Broadcast `room:user-left`
+  - **หากไม่มีแท็บอื่นเหลือแล้ว:** จะลบ Participant ด้วยคำสั่ง `HDEL`, Broadcast `room:user-left` แจ้งทุกคนในห้อง และลบคีย์ Session ด้วยคำสั่ง `DEL` ทันทีแบบ $O(1)$
 
 ##### 3.2.5 รายการห้องที่เปิดใช้งาน (`active_rooms` - Set)
 - **Key:** `active_rooms`
@@ -516,11 +521,11 @@ erDiagram
 | **Room Connection** | `room:join` | Client -> Server | `{ roomId, passcode? }` | ผู้ใช้ขอเข้าร่วมห้องสตรีม (ตรวจสอบสิทธิ์, รหัสผ่าน, และความจุห้อง) |
 | | `room:joined` | Server -> Client | `{ roomInfo, playbackState, participants, recentMessages }` | ส่งข้อมูลห้อง, สถานะวิดีโอจาก Redis, รายชื่อผู้ใช้ และประวัติแชทล่าสุดให้ Late-joiner |
 | | `room:leave` | Client -> Server | `{ roomId }` | ผู้ใช้ออกจากห้อง (ลบ Session และแจ้งเตือนห้อง) |
-| | `room:user-joined` | Server -> Room | `{ userId, displayName, role }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนเข้ามาใหม่ |
-| | `room:user-left` | Server -> Room | `{ userId, displayName }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนออกไป หรือหลุดการเชื่อมต่อ |
+| | `room:user-joined` | Server -> Room | `{ userId, displayName, role }` | แจ้งเตือนทุกคนในห้องเมื่อมีคนเข้ามาใหม่ (ป้องกันแจ้งเตือนซ้ำกรณีเปิดหลายแท็บ) |
+| | `room:user-left` | Server -> Room | `{ userId, displayName }` | แจ้งเตือนทุกคนในห้องเมื่อผู้ใช้ออกไป หรือแท็บทั้งหมดของผู้ใช้หลุดการเชื่อมต่อ |
 | | `room:end` | Host/Admin -> Server | `{ roomId, reason? }` | Host หรือ Admin ส่งคำขอสั่งปิดห้องสตรีม |
 | | `room:ended` | Server -> Room | `{ roomId, reason }` | แจ้งเตือนทุกคนในห้องเมื่อห้องถูกปิด และบังคับให้ออกจากห้อง |
-| **Video Selection** | `video:change` | Host/Admin -> Server | `{ roomId, sourceType, youtubeId?, fileUrl?, title?, mediaId? }` | Host สั่งเปลี่ยนวิดีโอ (YouTube หรือ Local file) บันทึกลง Redis และ MariaDB |
+| **Video Selection** | `video:change` | Host/Admin -> Server | `{ roomId, sourceType, youtubeId?, fileUrl?, title?, mediaId? }` | Host สั่งเปลี่ยนวิดีโอ (YouTube หรือ Local file) บันทึกลง MariaDB และ Redis แบบ Transactional พร้อม Rollback |
 | | `video:update` | Server -> Room | `{ mediaId?, sourceType, youtubeId?, fileUrl?, title }` | กระจายวิดีโอใหม่ให้ทุกคนในห้องสลับเครื่องเล่นพร้อมกัน |
 | **Playback Sync** | `video:control` | Host/Admin -> Server | `{ roomId, action, currentTime, speed?, volume? }` | Host สั่งควบคุม (action: `'play'`, `'pause'`, `'seek'`, `'ratechange'`) |
 | | `video:sync` | Server -> Viewers | `{ action, currentTime, speed, timestamp }` | Broadcast คำสั่งให้เฉพาะฝั่ง Viewers ซิงค์เวลาตาม Host ทันที |
@@ -579,7 +584,7 @@ erDiagram
 
 | Method | Endpoint | สิทธิ์ (Auth) | Request Body / Parameters | Response Status | Response Body (ตัวอย่าง) | คำอธิบาย |
 | :---: | :--- | :---: | :--- | :---: | :--- | :--- |
-| `GET` | `/media/stream/:filename` | Public | Param: `filename`, Header: `Range: bytes=start-end` | `206 Partial Content` / `200 OK` | Binary Video Stream (`video/mp4`, `video/webm`) | สตรีมไฟล์วิดีโอสาธารณะ รองรับ HTTP Range Request สำหรับแท็ก `<video>` |
+| `GET` | `/media/stream/:filename` | Public | Param: `filename`, Header: `Range: bytes=start-end` | `206 Partial Content` / `200 OK` | Binary Video Stream (`video/mp4`, `video/webm`) | สตรีมไฟล์วิดีโอสาธารณะ รองรับ HTTP Range Request (RFC 9110 พร้อม Range Clamping สำหรับ HTML5 Player) |
 | `POST` | `/media/upload` | User / Admin | Multipart Form: `file` (.mp4, .webm <= 500MB) | `201 Created` | `{ message: "File uploaded successfully", mediaId, title, fileUrl, ... }` | อัปโหลดไฟล์วิดีโอผ่าน Stream Pipeline และจำกัดขนาดไม่เกิน 500MB |
 | `POST` | `/media/youtube` | User / Admin | `{ url, title? }` | `201 Created` | `{ message: "YouTube media added successfully", mediaId, youtubeVideoId, ... }` | สกัด Video ID จาก URL YouTube และบันทึกลงในระบบ |
 | `GET` | `/media` | User / Admin | Query: `sourceType?` (`youtube`, `local_file`) | `200 OK` | `[ MediaInterface, ... ]` | ดึงรายการสื่อทั้งหมดที่บันทึกในระบบ |
