@@ -7,7 +7,7 @@ export default class UserService {
     private static readonly USER_CACHE_TTL = 60;
 
     public static async getUser(userId: number): Promise<UserSafeDTO> {
-        const cached = await RedisService.get<string>(`${this.USER_CACHE_PREFIX}${userId}`);
+        const cached = await RedisService.get(`${this.USER_CACHE_PREFIX}${userId}`);
         if (cached) {
             try {
                 const userSafe = JSON.parse(cached);
