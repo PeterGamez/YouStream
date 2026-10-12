@@ -292,7 +292,14 @@ export default class RoomSocket {
             this.server.log("Socket:Room", `Client disconnected: ${socket.id}`);
             const session = await RoomStateService.getSocketSession(socket.id);
             if (session) {
+                const roomKey = `room:${session.roomId}`;
+                const participant = await RoomStateService.getParticipant(session.roomId, session.userId);
                 await RoomStateService.removeParticipant(session.roomId, session.userId);
+
+                this.io.to(roomKey).emit("room:user-left", {
+                    userId: session.userId,
+                    displayName: participant?.displayName || socket.data?.user?.displayName || socket.data?.user?.username || "",
+                });
             }
             await RoomStateService.delSocketSession(socket.id);
         });
