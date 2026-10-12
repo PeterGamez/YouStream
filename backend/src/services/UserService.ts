@@ -1,4 +1,4 @@
-import type { UserInterface, UserSafeDTO } from "../interfaces/Database";
+import type { UserSafeDTO } from "../interfaces/Database";
 import UserModel from "../models/UserModel";
 import RedisService from "./RedisService";
 
@@ -22,11 +22,6 @@ export default class UserService {
             return null;
         }
 
-        await this.setUser(userId, user);
-        return user;
-    }
-
-    public static async setUser(userId: number, user: UserInterface): Promise<void> {
         const userSafe: UserSafeDTO = {
             id: user.id,
             username: user.username,
@@ -35,6 +30,12 @@ export default class UserService {
             avatarUrl: user.avatarUrl,
             role: user.role,
         };
+
+        await this.setUser(userId, userSafe);
+        return userSafe;
+    }
+
+    public static async setUser(userId: number, userSafe: UserSafeDTO): Promise<void> {
         await RedisService.set(`${this.USER_CACHE_PREFIX}${userId}`, JSON.stringify(userSafe));
         await RedisService.expire(`${this.USER_CACHE_PREFIX}${userId}`, this.USER_CACHE_TTL);
     }
