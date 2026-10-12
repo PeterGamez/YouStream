@@ -25,36 +25,84 @@ export default class VideoSocket {
                 return;
             }
 
-            const authCheck = await this.validateHost(socket, data.roomId);
+            const roomId = Number(data.roomId);
+            if (isNaN(roomId)) {
+                const errorPayload: SocketErrorPayload = {
+                    code: "INVALID_ROOM_ID",
+                    message: "Room ID must be a valid number",
+                };
+                socket.emit("error", errorPayload);
+                return;
+            }
+
+            const authCheck = await this.validateHost(socket, roomId);
             if (!authCheck.success) {
                 socket.emit("error", authCheck.error);
                 return;
             }
 
-            const roomKey = `room:${data.roomId}`;
-            this.server.log("Socket:Video", `Video changed in ${roomKey} by host ${authCheck.userId}: ${data.sourceType}`);
+            const room = await RoomModel.selectRoom(roomId);
+            if (!room) {
+                socket.emit("error", {
+                    code: "ROOM_NOT_FOUND",
+                    message: "Room not found",
+                });
+                return;
+            }
 
-            await RoomStateService.setPlaybackState(data.roomId, {
-                mediaId: data.mediaId ?? null,
-                mediaType: data.sourceType,
-                sourceUrl: (data.sourceType === "youtube" ? data.youtubeId : data.fileUrl) || "",
-                currentTime: 0,
-                isPlaying: false,
-                playbackSpeed: 1,
-                volume: 1,
-                updatedBy: authCheck.userId,
-                updatedAt: new Date().toISOString(),
-            });
+            const previousMediaType = room.mediaType;
+            const previousMediaId = room.currentMediaId;
 
-            try {
-                await RoomModel.updateRoomFields(Number(data.roomId), {
+           try {
+                await RoomModel.updateRoomFields(roomId, {
                     mediaType: data.sourceType,
                     currentMediaId: data.mediaId ?? null,
                 });
             } catch (dbErr) {
                 const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
-                this.server.warn("Socket:Video", `Failed to update room ${data.roomId} media in DB: ${dbMsg}`);
+                this.server.error("Socket:Video", `Failed to update room ${roomId} media in DB: ${dbMsg}`);
+                socket.emit("error", {
+                    code: "INTERNAL_ERROR",
+                    message: "Failed to update room media in database",
+                });
+                return;
             }
+
+            try {
+                await RoomStateService.setPlaybackState(roomId, {
+                    mediaId: data.mediaId ?? null,
+                    mediaType: data.sourceType,
+                    sourceUrl: (data.sourceType === "youtube" ? data.youtubeId : data.fileUrl) || "",
+                    currentTime: 0,
+                    isPlaying: false,
+                    playbackSpeed: 1,
+                    volume: 1,
+                    updatedBy: authCheck.userId,
+                    updatedAt: new Date().toISOString(),
+                });
+            } catch (redisErr) {
+                const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+                this.server.error("Socket:Video", `Failed to update playback state in Redis for room ${roomId}: ${redisMsg}`);
+
+                try {
+                    await RoomModel.updateRoomFields(roomId, {
+                        mediaType: previousMediaType,
+                        currentMediaId: previousMediaId,
+                    });
+                } catch (rollbackErr) {
+                    const rollbackMsg = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+                    this.server.error("Socket:Video", `Failed to rollback room ${roomId} media in DB: ${rollbackMsg}`);
+                }
+
+                socket.emit("error", {
+                    code: "INTERNAL_ERROR",
+                    message: "Failed to update playback state in cache",
+                });
+                return;
+            }
+
+            const roomKey = `room:${roomId}`;
+            this.server.log("Socket:Video", `Video changed in ${roomKey} by host ${authCheck.userId}: ${data.sourceType}`);
 
             this.io.to(roomKey).emit("video:update", {
                 mediaId: data.mediaId ?? null,
