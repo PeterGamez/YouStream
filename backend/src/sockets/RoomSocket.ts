@@ -117,7 +117,7 @@ export default class RoomSocket {
             await RoomStateService.addActiveRoom(roomId);
 
             const role: RedisParticipantRole = isHost ? "host" : "viewer";
-            const displayName = socket.data?.user?.displayName || socket.data?.user?.username || "";
+            const displayName = socket.data?.user?.displayName || "";
             const avatarUrl = socket.data?.user?.avatarUrl;
 
             await RoomStateService.addParticipant(roomId, {
@@ -186,7 +186,7 @@ export default class RoomSocket {
 
             this.io.to(roomKey).emit("room:user-left", {
                 userId: userId,
-                displayName: participant?.displayName || socket.data?.user?.displayName || socket.data?.user?.username || "",
+                displayName: participant?.displayName || socket.data?.user?.displayName || "",
             });
         });
 
@@ -298,7 +298,7 @@ export default class RoomSocket {
 
                 this.io.to(roomKey).emit("room:user-left", {
                     userId: session.userId,
-                    displayName: participant?.displayName || socket.data?.user?.displayName || socket.data?.user?.username || "",
+                    displayName: participant?.displayName || socket.data?.user?.displayName || "",
                 });
             }
             await RoomStateService.delSocketSession(socket.id);
