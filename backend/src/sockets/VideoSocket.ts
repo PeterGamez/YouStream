@@ -129,11 +129,11 @@ export default class VideoSocket {
                 return;
             }
 
-            const { roomKey, userId } = authCheck;
+            const { roomKey, userId, roomId } = authCheck;
             this.server.log("Socket:Video", `Video control in ${roomKey} by host ${userId}: ${data.action} at ${data.currentTime}s`);
 
             const isPlaying = data.action === "play" ? true : data.action === "pause" ? false : undefined;
-            await RoomStateService.setPlaybackState(data.roomId, {
+            await RoomStateService.setPlaybackState(roomId, {
                 currentTime: data.currentTime,
                 ...(isPlaying !== undefined ? { isPlaying } : {}),
                 ...(data.speed !== undefined ? { playbackSpeed: data.speed } : {}),
@@ -151,7 +151,27 @@ export default class VideoSocket {
         });
     }
 
-    private static async validateHost(socket: Socket, roomId: number | string): Promise<{ success: boolean; userId?: number; roomKey?: string; error?: SocketErrorPayload }> {
+    private static async validateHost(
+        socket: Socket,
+        roomId: number | string
+    ): Promise<{
+        success: boolean;
+        userId?: number;
+        roomKey?: string;
+        roomId?: number;
+        error?: SocketErrorPayload;
+    }> {
+        const numericRoomId = Number(roomId);
+        if (isNaN(numericRoomId)) {
+            return {
+                success: false,
+                error: {
+                    code: "INVALID_ROOM_ID",
+                    message: "Room ID must be a valid number",
+                },
+            };
+        }
+
         let userId: number = socket.data?.userId || socket.data?.user?.id;
         const session = await RoomStateService.getSocketSession(socket.id);
         if (!userId && session?.userId) {
@@ -168,9 +188,9 @@ export default class VideoSocket {
             };
         }
 
-        const roomKey = RoomStateService.getRoomKey(roomId);
+        const roomKey = RoomStateService.getRoomKey(numericRoomId);
 
-        const isInRoom = socket.rooms.has(roomKey) || (session && String(session.roomId) === String(roomId));
+        const isInRoom = socket.rooms.has(roomKey) || (session && Number(session.roomId) === numericRoomId);
         if (!isInRoom) {
             return {
                 success: false,
@@ -182,17 +202,17 @@ export default class VideoSocket {
         }
 
         if (socket.data?.user?.role === "admin") {
-            return { success: true, userId, roomKey };
+            return { success: true, userId, roomKey, roomId: numericRoomId };
         }
 
-        const participant = await RoomStateService.getParticipant(roomId, userId);
+        const participant = await RoomStateService.getParticipant(numericRoomId, userId);
         if (participant?.role === "host") {
-            return { success: true, userId, roomKey };
+            return { success: true, userId, roomKey, roomId: numericRoomId };
         }
 
-        const room = await RoomModel.selectRoom(Number(roomId));
+        const room = await RoomModel.selectRoom(numericRoomId);
         if (room && room.hostId === userId) {
-            return { success: true, userId, roomKey };
+            return { success: true, userId, roomKey, roomId: numericRoomId };
         }
 
         return {
