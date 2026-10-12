@@ -54,7 +54,7 @@ export default class RoomStateService {
         if (state.updatedAt !== undefined) data.updated_at = state.updatedAt;
 
         if (Object.keys(data).length > 0) {
-            await this.Redis.hset(key, data as Record<string, string>);
+            await this.Redis.hset(key, data);
         }
     }
 

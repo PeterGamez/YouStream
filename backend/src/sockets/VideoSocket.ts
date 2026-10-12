@@ -1,7 +1,11 @@
+import { existsSync } from "node:fs";
+
 import type { Server as IOServer, Socket } from "socket.io";
 
 import type Server from "../Server";
+import type { MediaInterface } from "../interfaces/Database";
 import type { SocketErrorPayload, VideoChangePayload, VideoControlPayload } from "../interfaces/Socket";
+import MediaModel from "../models/MediaModel";
 import RoomModel from "../models/RoomModel";
 import RoomStateService from "../services/RoomStateService";
 
@@ -35,6 +39,15 @@ export default class VideoSocket {
                 return;
             }
 
+            if (data?.sourceType !== "youtube" && data?.sourceType !== "local_file") {
+                const errorPayload: SocketErrorPayload = {
+                    code: "INVALID_SOURCE_TYPE",
+                    message: "Source type must be 'youtube' or 'local_file'",
+                };
+                socket.emit("error", errorPayload);
+                return;
+            }
+
             const authCheck = await this.validateHost(socket, roomId);
             if (!authCheck.success) {
                 socket.emit("error", authCheck.error);
@@ -50,13 +63,72 @@ export default class VideoSocket {
                 return;
             }
 
+            let media: MediaInterface | null = null;
+            if (data.mediaId !== undefined && data.mediaId !== null) {
+                const mediaId = Number(data.mediaId);
+                if (isNaN(mediaId)) {
+                    socket.emit("error", {
+                        code: "INVALID_MEDIA_ID",
+                        message: "Media ID must be a valid number",
+                    });
+                    return;
+                }
+                media = await MediaModel.selectMedia(mediaId);
+                if (!media) {
+                    socket.emit("error", {
+                        code: "MEDIA_NOT_FOUND",
+                        message: "Referenced media not found",
+                    });
+                    return;
+                }
+            } else if (data.sourceType === "youtube" && data.youtubeId) {
+                media = await MediaModel.selectMediaByYoutubeVideoId(data.youtubeId);
+            }
+
+            if (!media) {
+                socket.emit("error", {
+                    code: "MEDIA_REQUIRED",
+                    message: "A valid registered media item is required",
+                });
+                return;
+            }
+
+            if (media.sourceType !== data.sourceType) {
+                socket.emit("error", {
+                    code: "MEDIA_TYPE_MISMATCH",
+                    message: `Media source type mismatch: media is '${media.sourceType}' but requested '${data.sourceType}'`,
+                });
+                return;
+            }
+
+            let derivedFileUrl: string | undefined;
+            let derivedYoutubeId: string | undefined;
+            let derivedSourceUrl: string;
+
+            if (media.sourceType === "local_file") {
+                if (media.filePath && !existsSync(media.filePath)) {
+                    socket.emit("error", {
+                        code: "MEDIA_FILE_NOT_FOUND",
+                        message: "Media file not found on server storage",
+                    });
+                    return;
+                }
+                derivedFileUrl = media.sourceUrl;
+                derivedSourceUrl = media.sourceUrl;
+            } else {
+                derivedYoutubeId = media.youtubeVideoId || data.youtubeId;
+                derivedSourceUrl = media.sourceUrl || (derivedYoutubeId ? `https://www.youtube.com/watch?v=${derivedYoutubeId}` : "");
+            }
+
+            const derivedTitle = media.title || data.title || "";
+
             const previousMediaType = room.mediaType;
             const previousMediaId = room.currentMediaId;
 
             try {
                 await RoomModel.updateRoomFields(roomId, {
-                    mediaType: data.sourceType,
-                    currentMediaId: data.mediaId ?? null,
+                    mediaType: media.sourceType,
+                    currentMediaId: media.id,
                 });
             } catch (dbErr) {
                 const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
@@ -70,9 +142,9 @@ export default class VideoSocket {
 
             try {
                 await RoomStateService.setPlaybackState(roomId, {
-                    mediaId: data.mediaId ?? null,
-                    mediaType: data.sourceType,
-                    sourceUrl: (data.sourceType === "youtube" ? data.youtubeId : data.fileUrl) || "",
+                    mediaId: media.id,
+                    mediaType: media.sourceType,
+                    sourceUrl: derivedSourceUrl,
                     currentTime: 0,
                     isPlaying: false,
                     playbackSpeed: 1,
@@ -102,14 +174,14 @@ export default class VideoSocket {
             }
 
             const { roomKey, userId } = authCheck;
-            this.server.log("Socket:Video", `Video changed in ${roomKey} by host ${userId}: ${data.sourceType}`);
+            this.server.log("Socket:Video", `Video changed in ${roomKey} by host ${userId}: ${media.sourceType} (mediaId: ${media.id})`);
 
             this.io.to(roomKey).emit("video:update", {
-                mediaId: data.mediaId ?? null,
-                sourceType: data.sourceType,
-                youtubeId: data.youtubeId,
-                fileUrl: data.fileUrl,
-                title: data.title || "",
+                mediaId: media.id,
+                sourceType: media.sourceType,
+                youtubeId: derivedYoutubeId,
+                fileUrl: derivedFileUrl,
+                title: derivedTitle,
             });
         });
 
