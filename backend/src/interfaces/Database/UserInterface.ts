@@ -21,10 +21,10 @@ export interface UserRawInterface extends InterfaceBaseRaw {
 }
 
 export type UserSafeDTO = {
-    id: UserInterface["id"];
-    username: UserInterface["username"];
-    email: UserInterface["email"];
-    displayName: UserInterface["displayName"];
-    avatarUrl: UserInterface["avatarUrl"];
-    role: UserInterface["role"];
+    id: number;
+    username: string;
+    email: string;
+    displayName: string;
+    avatarUrl: string;
+    role: UserRole;
 };

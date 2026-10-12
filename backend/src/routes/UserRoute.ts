@@ -93,8 +93,8 @@ export default class UserRoute implements RouteInterface {
 
         this.app.patch("/me/password", async (c) => {
             try {
-                const user = await this.server.Middleware.getUser(c);
-                if (!user) {
+                const me = await this.server.Middleware.getUser(c);
+                if (!me) {
                     return c.json({ error: "User not found" }, 404);
                 }
 
@@ -110,6 +110,11 @@ export default class UserRoute implements RouteInterface {
 
                 if (!currentPassword || !newPassword) {
                     return c.json({ error: "Current password and new password are required" }, 400);
+                }
+
+                const user = await UserModel.selectUser(me.id);
+                if (!user) {
+                    return c.json({ error: "User not found" }, 404);
                 }
 
                 const isValidPassword = await this.server.Password.verify(currentPassword, user.password);
