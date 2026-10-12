@@ -37,7 +37,7 @@ export default class AuthRoute implements RouteInterface {
                 password = password?.trim();
                 displayName = displayName?.trim();
 
-                if (!username || !email || !password) {
+                if (!username || !email || !password || !displayName) {
                     return c.json({ error: "Missing required fields" }, 400);
                 }
 

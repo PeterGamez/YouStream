@@ -1,32 +1,44 @@
 import type { Pool, ResultSetHeader } from "mysql2/promise";
 
-import type { MediaInterface, MediaRawInterface, MediaSourceType } from "../interfaces/Database";
+import type { CountRow, MediaInterface, MediaRawInterface, MediaSourceType } from "../interfaces/Database";
 import type { MediaType } from "../interfaces/Type";
 
 export default class MediaModel {
     private static table: string;
     private static DB: Pool;
 
+    private static readonly COLUMN_MAP: Record<string, string> = {
+        uploaderId: "uploader_id",
+        sourceType: "source_type",
+        sourceUrl: "source_url",
+        youtubeVideoId: "youtube_video_id",
+        filePath: "file_path",
+        fileSizeBytes: "file_size_bytes",
+        mimeType: "mime_type",
+        durationSeconds: "duration_seconds",
+        title: "title",
+    };
+
     public static init(table: string, DB: Pool) {
         this.table = table;
         this.DB = DB;
     }
 
-    private static mapRowToMedia(row: MediaRawInterface | any): MediaInterface | null {
+    private static mapRowToMedia(row: MediaRawInterface): MediaInterface {
         if (!row) return null;
         return {
             id: row.id,
-            uploaderId: row.uploader_id ?? row.uploaderId,
-            sourceType: row.source_type ?? row.sourceType,
+            uploaderId: row.uploader_id,
+            sourceType: row.source_type,
             title: row.title,
-            sourceUrl: row.source_url ?? row.sourceUrl,
-            youtubeVideoId: row.youtube_video_id ?? row.youtubeVideoId ?? null,
-            filePath: row.file_path ?? row.filePath ?? null,
-            fileSizeBytes: row.file_size_bytes !== null && row.file_size_bytes !== undefined ? Number(row.file_size_bytes) : (row.fileSizeBytes ?? null),
-            mimeType: row.mime_type ?? row.mimeType ?? null,
-            durationSeconds: row.duration_seconds !== null && row.duration_seconds !== undefined ? Number(row.duration_seconds) : (row.durationSeconds ?? null),
-            createdAt: row.created_at ?? row.createdAt,
-            updatedAt: row.updated_at ?? row.updatedAt,
+            sourceUrl: row.source_url,
+            youtubeVideoId: row.youtube_video_id,
+            filePath: row.file_path,
+            fileSizeBytes: row.file_size_bytes,
+            mimeType: row.mime_type,
+            durationSeconds: row.duration_seconds,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
         };
     }
 
@@ -55,8 +67,8 @@ export default class MediaModel {
         const sql = `SELECT * FROM ${this.table} WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [id]);
-            return this.mapRowToMedia((rows as any[])[0]);
+            const [rows] = await connection.execute<MediaRawInterface[]>(sql, [id]);
+            return this.mapRowToMedia(rows[0]);
         } finally {
             connection.release();
         }
@@ -66,8 +78,8 @@ export default class MediaModel {
         const sql = `SELECT * FROM ${this.table} ORDER BY id ASC`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql);
-            return (rows as any[]).map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
+            const [rows] = await connection.execute<MediaRawInterface[]>(sql);
+            return rows.map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
         } finally {
             connection.release();
         }
@@ -77,8 +89,8 @@ export default class MediaModel {
         const sql = `SELECT * FROM ${this.table} WHERE uploader_id = ? ORDER BY id DESC`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [uploaderId]);
-            return (rows as any[]).map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
+            const [rows] = await connection.execute<MediaRawInterface[]>(sql, [uploaderId]);
+            return rows.map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
         } finally {
             connection.release();
         }
@@ -88,8 +100,8 @@ export default class MediaModel {
         const sql = `SELECT * FROM ${this.table} WHERE source_type = ? ORDER BY id DESC`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [sourceType]);
-            return (rows as any[]).map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
+            const [rows] = await connection.execute<MediaRawInterface[]>(sql, [sourceType]);
+            return rows.map((row) => this.mapRowToMedia(row)).filter((m): m is MediaInterface => m !== null);
         } finally {
             connection.release();
         }
@@ -99,8 +111,8 @@ export default class MediaModel {
         const sql = `SELECT * FROM ${this.table} WHERE youtube_video_id = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [youtubeVideoId]);
-            return this.mapRowToMedia((rows as any[])[0]);
+            const [rows] = await connection.execute<MediaRawInterface[]>(sql, [youtubeVideoId]);
+            return this.mapRowToMedia(rows[0]);
         } finally {
             connection.release();
         }
@@ -110,26 +122,15 @@ export default class MediaModel {
         const sql = `SELECT COUNT(*) as count FROM ${this.table} WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [id]);
-            return Number((rows as any[])[0].count) > 0;
+            const [rows] = await connection.execute<CountRow[]>(sql, [id]);
+            return Number(rows[0]?.count) > 0;
         } finally {
             connection.release();
         }
     }
 
     public static async updateMedia<T extends keyof MediaType>(id: number, type: T, value: MediaType[T]): Promise<void> {
-        const columnMap: Record<string, string> = {
-            uploaderId: "uploader_id",
-            sourceType: "source_type",
-            sourceUrl: "source_url",
-            youtubeVideoId: "youtube_video_id",
-            filePath: "file_path",
-            fileSizeBytes: "file_size_bytes",
-            mimeType: "mime_type",
-            durationSeconds: "duration_seconds",
-            title: "title",
-        };
-        const column = columnMap[type as string] || (type as string);
+        const column = this.COLUMN_MAP[type as string] || (type as string);
         const sql = `UPDATE ${this.table} SET ${column} = ? WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
@@ -141,22 +142,12 @@ export default class MediaModel {
 
     public static async updateMediaFields(id: number, fields: Partial<MediaType>): Promise<void> {
         const updates: string[] = [];
-        const values: any[] = [];
-        const columnMap: Record<string, string> = {
-            uploaderId: "uploader_id",
-            sourceType: "source_type",
-            sourceUrl: "source_url",
-            youtubeVideoId: "youtube_video_id",
-            filePath: "file_path",
-            fileSizeBytes: "file_size_bytes",
-            mimeType: "mime_type",
-            durationSeconds: "duration_seconds",
-            title: "title",
-        };
+        const values: (string | number)[] = [];
 
         for (const [key, val] of Object.entries(fields)) {
             if (val !== undefined) {
-                const col = columnMap[key] || key;
+                const col = this.COLUMN_MAP[key];
+                if (!col) continue;
                 updates.push(`${col} = ?`);
                 values.push(val);
             }

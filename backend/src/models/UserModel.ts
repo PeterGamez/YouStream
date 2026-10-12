@@ -1,36 +1,50 @@
 import type { Pool, ResultSetHeader } from "mysql2/promise";
 
 import Gravatar from "../integrations/Gravatar";
-import type { UserInterface, UserRawInterface } from "../interfaces/Database";
+import type { CountRow, UserInterface, UserRawInterface } from "../interfaces/Database";
 import type { UserType } from "../interfaces/Type";
 
 export default class UserModel {
     private static table: string;
     private static DB: Pool;
 
+    private static readonly COLUMN_MAP: Record<string, string> = {
+        displayName: "display_name",
+        avatarUrl: "avatar_url",
+        display_name: "display_name",
+        avatar_url: "avatar_url",
+        password: "password",
+        email: "email",
+        username: "username",
+        role: "role",
+    };
+
     public static init(table: string, DB: Pool) {
         this.table = table;
         this.DB = DB;
     }
 
-    private static mapRowToUser(row: UserRawInterface | any): UserInterface | null {
+    public static get getTable(): string {
+        return this.table;
+    }
+
+    private static mapRowToUser(row: UserRawInterface): UserInterface {
         if (!row) return null;
         return {
             id: row.id,
             username: row.username,
             email: row.email,
             password: row.password,
-            displayName: row.display_name ?? row.displayName ?? "",
-            avatarUrl: row.avatar_url ?? row.avatarUrl ?? "",
+            displayName: row.display_name,
+            avatarUrl: row.avatar_url,
             role: row.role,
-            createdAt: row.created_at ?? row.createdAt,
-            updatedAt: row.updated_at ?? row.updatedAt,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
         };
     }
 
     public static async createUser(username: string, email: string, password: string, displayName: string): Promise<number> {
-        const gravatar = await Gravatar.isAvatarExist(email);
-        const avatarUrl = gravatar.isExist ? gravatar.url : null;
+        const avatarUrl = await Gravatar.getAvatarURL(email);
 
         const connection = await this.DB.getConnection();
         try {
@@ -46,8 +60,21 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [id]);
-            return this.mapRowToUser((rows as any[])[0]);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql, [id]);
+            return this.mapRowToUser(rows[0]);
+        } finally {
+            connection.release();
+        }
+    }
+
+    public static async selectUsersByIds(ids: number[]): Promise<UserInterface[]> {
+        if (!ids || ids.length === 0) return [];
+        const placeholders = ids.map(() => "?").join(", ");
+        const sql = `SELECT * FROM ${this.table} WHERE id IN (${placeholders})`;
+        const connection = await this.DB.getConnection();
+        try {
+            const [rows] = await connection.execute<UserRawInterface[]>(sql, ids);
+            return rows.map((row) => this.mapRowToUser(row)).filter((u): u is UserInterface => u !== null);
         } finally {
             connection.release();
         }
@@ -57,8 +84,8 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} ORDER BY id ASC`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql);
-            return (rows as any[]).map((row) => this.mapRowToUser(row)).filter((u): u is UserInterface => u !== null);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql);
+            return rows.map((row) => this.mapRowToUser(row)).filter((u): u is UserInterface => u !== null);
         } finally {
             connection.release();
         }
@@ -68,8 +95,8 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} WHERE (username = ? OR email = ?)`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [user, user]);
-            return this.mapRowToUser((rows as any[])[0]);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql, [user, user]);
+            return this.mapRowToUser(rows[0]);
         } finally {
             connection.release();
         }
@@ -79,8 +106,8 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} WHERE username = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [username]);
-            return this.mapRowToUser((rows as any[])[0]);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql, [username]);
+            return this.mapRowToUser(rows[0]);
         } finally {
             connection.release();
         }
@@ -90,8 +117,8 @@ export default class UserModel {
         const sql = `SELECT * FROM ${this.table} WHERE email = ?`;
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [email]);
-            return this.mapRowToUser((rows as any[])[0]);
+            const [rows] = await connection.execute<UserRawInterface[]>(sql, [email]);
+            return this.mapRowToUser(rows[0]);
         } finally {
             connection.release();
         }
@@ -102,25 +129,15 @@ export default class UserModel {
 
         const connection = await this.DB.getConnection();
         try {
-            const [rows] = await connection.execute(sql, [username, email]);
-            return Number((rows as any[])[0].count) > 0;
+            const [rows] = await connection.execute<CountRow[]>(sql, [username, email]);
+            return Number(rows[0]?.count) > 0;
         } finally {
             connection.release();
         }
     }
 
     public static async updateUser<T extends keyof UserType>(id: number, type: T, value: UserType[T]): Promise<void> {
-        const columnMap: Record<string, string> = {
-            displayName: "display_name",
-            avatarUrl: "avatar_url",
-            display_name: "display_name",
-            avatar_url: "avatar_url",
-            password: "password",
-            email: "email",
-            username: "username",
-            role: "role",
-        };
-        const column = columnMap[type as string] || (type as string);
+        const column = this.COLUMN_MAP[type as string] || (type as string);
         const sql = `UPDATE ${this.table} SET ${column} = ? WHERE id = ?`;
         const connection = await this.DB.getConnection();
         try {
@@ -132,7 +149,7 @@ export default class UserModel {
 
     public static async updateUserFields(id: number, fields: { displayName?: string; avatarUrl?: string }): Promise<void> {
         const updates: string[] = [];
-        const values: any[] = [];
+        const values: (string | number)[] = [];
 
         if (fields.displayName !== undefined) {
             updates.push("display_name = ?");

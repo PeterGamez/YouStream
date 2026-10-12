@@ -11,6 +11,7 @@ import MediaModel from "../models/MediaModel";
 import RoomModel from "../models/RoomModel";
 import UserModel from "../models/UserModel";
 import RoomStateService from "../services/RoomStateService";
+import SocketService from "../services/SocketService";
 import UserService from "../services/UserService";
 import RoomSocket from "../sockets/RoomSocket";
 
@@ -54,8 +55,9 @@ export default class AdminRoute implements RouteInterface {
                         totalStorageSizeBytes,
                     },
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Stats error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Stats error: ${message}`);
                 return c.json({ error: "Failed to retrieve admin stats" }, 500);
             }
         });
@@ -78,8 +80,9 @@ export default class AdminRoute implements RouteInterface {
                 return c.json({
                     users: safeUsers,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Get users error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Get users error: ${message}`);
                 return c.json({ error: "Failed to retrieve users" }, 500);
             }
         });
@@ -89,6 +92,11 @@ export default class AdminRoute implements RouteInterface {
                 const id = parseInt(c.req.param("id"), 10);
                 if (isNaN(id)) {
                     return c.json({ error: "Invalid user ID" }, 400);
+                }
+
+                const currentAdmin = await this.server.Middleware.getUser(c);
+                if (currentAdmin && currentAdmin.id === id) {
+                    return c.json({ error: "Cannot modify your own role" }, 400);
                 }
 
                 let body: { role: UserInterface["role"] };
@@ -109,7 +117,17 @@ export default class AdminRoute implements RouteInterface {
                 }
 
                 await UserModel.updateUser(id, "role", role);
-                UserService.delUser(id);
+                await UserService.delUser(id);
+
+                try {
+                    await SocketService.revokeUserSockets(id, "User role was changed by administrator");
+                } catch (revokeErr) {
+                    const revokeMsg = revokeErr instanceof Error ? revokeErr.message : String(revokeErr);
+                    this.server.error("Admin Route", `Failed to revoke sockets for user ${id}: ${revokeMsg}`);
+                    await UserModel.updateUser(id, "role", user.role).catch(() => {});
+                    await UserService.delUser(id).catch(() => {});
+                    return c.json({ error: `Failed to revoke active user socket sessions: ${revokeMsg}` }, 500);
+                }
 
                 this.server.log("Admin Route", `Updated role for user ${id} to ${role}`);
 
@@ -118,8 +136,9 @@ export default class AdminRoute implements RouteInterface {
                     userId: id,
                     role,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Update role error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Update role error: ${message}`);
                 return c.json({ error: "Failed to update user role" }, 500);
             }
         });
@@ -131,13 +150,60 @@ export default class AdminRoute implements RouteInterface {
                     return c.json({ error: "Invalid user ID" }, 400);
                 }
 
+                const currentAdmin = await this.server.Middleware.getUser(c);
+                if (currentAdmin && currentAdmin.id === id) {
+                    return c.json({ error: "Cannot delete or suspend your own account" }, 400);
+                }
+
                 const user = await UserModel.selectUser(id);
                 if (!user) {
                     return c.json({ error: "User not found" }, 404);
                 }
 
+                const activeRooms = await RoomModel.selectActiveRoomsByHost(id);
+
+                for (const room of activeRooms) {
+                    let cleanedUp = false;
+                    let lastError: Error | null = null;
+                    const maxRetries = 3;
+
+                    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                        try {
+                            await RoomModel.endRoom(room.id);
+                            await RoomStateService.cleanupRoom(room.id);
+                            RoomSocket.endRoom(room.id, "Room ended: Host account was suspended by administrator");
+                            cleanedUp = true;
+                            break;
+                        } catch (roomErr) {
+                            lastError = roomErr instanceof Error ? roomErr : new Error(String(roomErr));
+                            this.server.warn("Admin Route", `Attempt ${attempt}/${maxRetries} failed to cleanup room ${room.id} for user ${id}: ${lastError.message}`);
+                            if (attempt < maxRetries) {
+                                await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+                            }
+                        }
+                    }
+
+                    if (!cleanedUp) {
+                        this.server.error("Admin Route", `Aborting user deletion: failed to terminate room ${room.id} for user ${id} after ${maxRetries} attempts`);
+                        return c.json(
+                            {
+                                error: `Failed to terminate active room ${room.id}. User deletion aborted: ${lastError?.message || "Unknown error"}`,
+                            },
+                            500
+                        );
+                    }
+                }
+
                 await UserModel.deleteUser(id);
-                UserService.delUser(id);
+                await UserService.delUser(id);
+
+                try {
+                    await SocketService.revokeUserSockets(id, "User account was suspended by administrator");
+                } catch (revokeErr) {
+                    const revokeMsg = revokeErr instanceof Error ? revokeErr.message : String(revokeErr);
+                    this.server.error("Admin Route", `Failed to revoke sockets for deleted user ${id}: ${revokeMsg}`);
+                    return c.json({ error: `Failed to revoke active user socket sessions: ${revokeMsg}` }, 500);
+                }
 
                 this.server.log("Admin Route", `User ${id} suspended/deleted by admin`);
 
@@ -145,8 +211,9 @@ export default class AdminRoute implements RouteInterface {
                     message: "User suspended successfully",
                     userId: id,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Delete user error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Delete user error: ${message}`);
                 return c.json({ error: "Failed to delete user" }, 500);
             }
         });
@@ -163,8 +230,9 @@ export default class AdminRoute implements RouteInterface {
                 return c.json({
                     rooms: safeRooms,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Get rooms error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Get rooms error: ${message}`);
                 return c.json({ error: "Failed to retrieve rooms" }, 500);
             }
         });
@@ -202,8 +270,9 @@ export default class AdminRoute implements RouteInterface {
                     roomId: id,
                     endedAt: new Date().toISOString(),
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `End room error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `End room error: ${message}`);
                 return c.json({ error: "Failed to terminate room" }, 500);
             }
         });
@@ -215,8 +284,9 @@ export default class AdminRoute implements RouteInterface {
                 return c.json({
                     media,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Get media error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Get media error: ${message}`);
                 return c.json({ error: "Failed to retrieve media files" }, 500);
             }
         });
@@ -249,8 +319,9 @@ export default class AdminRoute implements RouteInterface {
                     message: "Media deleted by administrator",
                     mediaId: id,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Delete media error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Delete media error: ${message}`);
                 return c.json({ error: "Failed to delete media" }, 500);
             }
         });
@@ -293,8 +364,9 @@ export default class AdminRoute implements RouteInterface {
                     reclaimedFilesCount,
                     reclaimedSizeBytes,
                 });
-            } catch (error: any) {
-                this.server.error("Admin Route", `Storage cleanup error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Admin Route", `Storage cleanup error: ${message}`);
                 return c.json({ error: "Failed to run storage cleanup" }, 500);
             }
         });

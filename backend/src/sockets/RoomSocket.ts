@@ -1,11 +1,12 @@
 import type { Server as IOServer, Socket } from "socket.io";
 
 import type Server from "../Server";
-import Gravatar from "../integrations/Gravatar";
 import type { RedisParticipantRole } from "../interfaces/Redis";
 import type { RoomEndPayload, RoomJoinPayload, RoomLeavePayload, SocketErrorPayload } from "../interfaces/Socket";
 import RoomModel from "../models/RoomModel";
+import RoomReconciliationService from "../services/RoomReconciliationService";
 import RoomStateService from "../services/RoomStateService";
+import UserService from "../services/UserService";
 
 export default class RoomSocket {
     private static io: IOServer;
@@ -37,7 +38,6 @@ export default class RoomSocket {
                 return;
             }
 
-            // 1. Look up room in database
             const room = await RoomModel.selectRoom(roomId);
             if (!room) {
                 const errorPayload: SocketErrorPayload = {
@@ -48,7 +48,6 @@ export default class RoomSocket {
                 return;
             }
 
-            // 2. Validate room is active
             if (room.status !== "active") {
                 const errorPayload: SocketErrorPayload = {
                     code: "ROOM_ENDED",
@@ -58,9 +57,8 @@ export default class RoomSocket {
                 return;
             }
 
-            // 3. Resolve user identity and role
             const session = await RoomStateService.getSocketSession(socket.id);
-            const userId = socket.data?.userId || socket.data?.user?.id || session?.userId;
+            let userId = socket.data?.userId || socket.data?.user?.id || session?.userId;
 
             if (!userId) {
                 const errorPayload: SocketErrorPayload = {
@@ -71,10 +69,24 @@ export default class RoomSocket {
                 return;
             }
 
-            const isAdmin = socket.data?.user?.role === "admin";
+            if (!socket.data?.userId) {
+                socket.data.userId = userId;
+            }
+
+            const freshUser = await UserService.revalidateSocketUser(socket);
+            if (!freshUser) {
+                const errorPayload: SocketErrorPayload = {
+                    code: "UNAUTHORIZED",
+                    message: "Authentication required or user session has expired",
+                };
+                socket.emit("error", errorPayload);
+                return;
+            }
+
+            userId = freshUser.id;
+            const isAdmin = freshUser.role === "admin";
             const isHost = room.hostId === userId || isAdmin;
 
-            // 4. Validate passcode hash for private rooms (host and admin bypass)
             if (room.isPrivate && room.passcode && !isHost) {
                 const passcode = data.passcode?.trim();
                 if (!passcode) {
@@ -97,37 +109,40 @@ export default class RoomSocket {
                 }
             }
 
-            // 5. Check capacity limit
             if (room.maxParticipants && room.maxParticipants > 0 && !isHost) {
-                const participantCount = await RoomStateService.getParticipantCount(roomId);
-                if (participantCount >= room.maxParticipants) {
-                    const errorPayload: SocketErrorPayload = {
-                        code: "ROOM_FULL",
-                        message: "Room has reached its maximum participant capacity",
-                    };
-                    socket.emit("error", errorPayload);
-                    return;
+                const existingParticipant = await RoomStateService.getParticipant(roomId, userId);
+                if (!existingParticipant) {
+                    const participantCount = await RoomStateService.getParticipantCount(roomId);
+                    if (participantCount >= room.maxParticipants) {
+                        const errorPayload: SocketErrorPayload = {
+                            code: "ROOM_FULL",
+                            message: "Room has reached its maximum participant capacity",
+                        };
+                        socket.emit("error", errorPayload);
+                        return;
+                    }
                 }
             }
 
-            // 6. Validated: Join Socket.IO room channel
-            const roomKey = `room:${roomId}`;
+            const roomKey = RoomStateService.getRoomKey(roomId);
             socket.join(roomKey);
 
             await RoomStateService.setSocketSession(socket.id, userId, roomId);
             await RoomStateService.addActiveRoom(roomId);
 
             const role: RedisParticipantRole = isHost ? "host" : "viewer";
-            const displayName = socket.data?.user?.displayName || socket.data?.user?.username || "";
-            const avatarUrl = socket.data?.user?.avatarUrl || Gravatar.getDefaultAvatarURL();
+            const displayName = socket.data?.user?.displayName || "";
+            const avatarUrl = socket.data?.user?.avatarUrl;
+
+            const existingParticipant = await RoomStateService.getParticipant(roomId, userId);
 
             await RoomStateService.addParticipant(roomId, {
                 userId,
-                displayName,
-                avatarUrl,
+                displayName: displayName || existingParticipant?.displayName || "",
+                avatarUrl: avatarUrl ?? existingParticipant?.avatarUrl,
                 role,
                 socketId: socket.id,
-                joinedAt: new Date().toISOString(),
+                joinedAt: existingParticipant?.joinedAt || new Date().toISOString(),
             });
 
             this.server.log("Socket:Room", `Client ${socket.id} (user ${userId}, role: ${role}) joined ${roomKey}`);
@@ -135,6 +150,13 @@ export default class RoomSocket {
             const recentMessages = await RoomStateService.getMessages(roomId, 100);
             const participants = await RoomStateService.getParticipants(roomId);
             const playbackState = await RoomStateService.getPlaybackState(roomId);
+
+            const effectiveMedia = await RoomReconciliationService.getEffectiveRoomMedia(roomId, {
+                mediaType: room.mediaType,
+                currentMediaId: room.currentMediaId,
+            });
+            room.mediaType = effectiveMedia.mediaType;
+            room.currentMediaId = effectiveMedia.currentMediaId;
 
             socket.emit("room:joined", {
                 roomInfo: {
@@ -164,31 +186,49 @@ export default class RoomSocket {
                 recentMessages,
             });
 
-            socket.to(roomKey).emit("room:user-joined", {
-                userId,
-                displayName,
-                role,
-            });
+            if (!existingParticipant) {
+                socket.to(roomKey).emit("room:user-joined", {
+                    userId,
+                    displayName,
+                    role,
+                });
+            }
         });
 
         socket.on("room:leave", async (data: RoomLeavePayload) => {
-            const roomKey = `room:${data.roomId}`;
+            const session = await RoomStateService.getSocketSession(socket.id);
+            const roomId = data?.roomId ? Number(data.roomId) : session?.roomId;
+            if (!roomId || isNaN(roomId)) {
+                await RoomStateService.delSocketSession(socket.id);
+                return;
+            }
+
+            const roomKey = RoomStateService.getRoomKey(roomId);
             socket.leave(roomKey);
 
-            const session = await RoomStateService.getSocketSession(socket.id);
             const userId = session?.userId || socket.data?.userId || socket.data?.user?.id;
-            const participant = userId ? await RoomStateService.getParticipant(data.roomId, userId) : null;
-            if (userId) {
-                await RoomStateService.removeParticipant(data.roomId, userId);
-            }
             await RoomStateService.delSocketSession(socket.id);
 
-            this.server.log("Socket:Room", `Client ${socket.id} left ${roomKey}`);
+            if (userId) {
+                const participant = await RoomStateService.getParticipant(roomId, userId);
+                if (participant && participant.socketId === socket.id) {
+                    const remainingSockets = await this.io.in(roomKey).fetchSockets();
+                    const otherSocket = remainingSockets.find((s) => (s.data?.userId || s.data?.user?.id) === userId);
 
-            this.io.to(roomKey).emit("room:user-left", {
-                userId: userId,
-                displayName: participant?.displayName || socket.data?.user?.displayName || socket.data?.user?.username || "",
-            });
+                    if (otherSocket) {
+                        participant.socketId = otherSocket.id;
+                        await RoomStateService.addParticipant(roomId, participant);
+                    } else {
+                        await RoomStateService.removeParticipant(roomId, userId);
+                        this.io.to(roomKey).emit("room:user-left", {
+                            userId: userId,
+                            displayName: participant.displayName || socket.data?.user?.displayName || "",
+                        });
+                    }
+                }
+            }
+
+            this.server.log("Socket:Room", `Client ${socket.id} left ${roomKey}`);
         });
 
         socket.on("room:end", async (data: RoomEndPayload) => {
@@ -211,11 +251,11 @@ export default class RoomSocket {
                 return;
             }
 
-            // 1. Enforce socket identity (Authentication)
             let userId: number = socket.data?.userId || socket.data?.user?.id;
             const session = await RoomStateService.getSocketSession(socket.id);
             if (!userId && session?.userId) {
                 userId = session.userId;
+                socket.data.userId = userId;
             }
 
             if (!userId) {
@@ -227,9 +267,20 @@ export default class RoomSocket {
                 return;
             }
 
-            const roomKey = `room:${roomId}`;
+            const freshUser = await UserService.revalidateSocketUser(socket);
+            if (!freshUser) {
+                const errorPayload: SocketErrorPayload = {
+                    code: "UNAUTHORIZED",
+                    message: "Authentication required or user session has expired",
+                };
+                socket.emit("error", errorPayload);
+                return;
+            }
 
-            // 2. Enforce room-membership context
+            userId = freshUser.id;
+
+            const roomKey = RoomStateService.getRoomKey(roomId);
+
             const isInRoom = socket.rooms.has(roomKey) || (session && Number(session.roomId) === roomId);
             if (!isInRoom) {
                 const errorPayload: SocketErrorPayload = {
@@ -240,7 +291,6 @@ export default class RoomSocket {
                 return;
             }
 
-            // 3. Query the room from database
             const room = await RoomModel.selectRoom(roomId);
             if (!room) {
                 const errorPayload: SocketErrorPayload = {
@@ -251,8 +301,7 @@ export default class RoomSocket {
                 return;
             }
 
-            // 4. Enforce host / admin authorization
-            const isAdmin = socket.data?.user?.role === "admin";
+            const isAdmin = freshUser.role === "admin";
             const isHost = room.hostId === userId || isAdmin;
 
             if (!isHost) {
@@ -264,11 +313,11 @@ export default class RoomSocket {
                 return;
             }
 
-            // 5. Execute room-ending operations (DB update + Redis cleanup + broadcast)
             try {
                 await RoomModel.endRoom(roomId);
-            } catch (dbErr: any) {
-                this.server.error("Socket:Room", `Failed to end room ${roomId} in database: ${dbErr?.message || dbErr}`);
+            } catch (dbErr) {
+                const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+                this.server.error("Socket:Room", `Failed to end room ${roomId} in database: ${dbMsg}`);
                 socket.emit("error", {
                     code: "INTERNAL_ERROR",
                     message: "Failed to terminate room in database",
@@ -278,8 +327,9 @@ export default class RoomSocket {
 
             try {
                 await RoomStateService.cleanupRoom(roomId);
-            } catch (redisErr: any) {
-                this.server.warn("Socket:Room", `Redis cleanup error for room ${roomId}: ${redisErr?.message || redisErr}`);
+            } catch (redisErr) {
+                const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+                this.server.warn("Socket:Room", `Redis cleanup error for room ${roomId}: ${redisMsg}`);
             }
 
             this.server.log("Socket:Room", `Room ${roomId} ended by user ${userId}`);
@@ -293,14 +343,31 @@ export default class RoomSocket {
             this.server.log("Socket:Room", `Client disconnected: ${socket.id}`);
             const session = await RoomStateService.getSocketSession(socket.id);
             if (session) {
-                await RoomStateService.removeParticipant(session.roomId, session.userId);
+                const roomKey = RoomStateService.getRoomKey(session.roomId);
+                const participant = await RoomStateService.getParticipant(session.roomId, session.userId);
+
+                if (participant && participant.socketId === socket.id) {
+                    const remainingSockets = await this.io.in(roomKey).fetchSockets();
+                    const otherSocket = remainingSockets.find((s) => (s.data?.userId || s.data?.user?.id) === session.userId);
+
+                    if (otherSocket) {
+                        participant.socketId = otherSocket.id;
+                        await RoomStateService.addParticipant(session.roomId, participant);
+                    } else {
+                        await RoomStateService.removeParticipant(session.roomId, session.userId);
+                        this.io.to(roomKey).emit("room:user-left", {
+                            userId: session.userId,
+                            displayName: participant.displayName || socket.data?.user?.displayName || "",
+                        });
+                    }
+                }
             }
             await RoomStateService.delSocketSession(socket.id);
         });
     }
 
     public static endRoom(roomId: number | string, reason?: string): void {
-        const roomKey = `room:${roomId}`;
+        const roomKey = RoomStateService.getRoomKey(roomId);
         this.server.log("Socket:Room", `Room ended: ${roomKey}`);
         this.io.to(roomKey).emit("room:ended", {
             roomId: Number(roomId),

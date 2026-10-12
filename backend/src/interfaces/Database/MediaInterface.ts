@@ -14,8 +14,6 @@ export interface MediaInterface extends InterfaceBase {
     durationSeconds: number;
 }
 
-export type MediaSafeDTO = MediaInterface;
-
 export interface MediaRawInterface extends InterfaceBaseRaw {
     uploader_id: number;
     source_type: MediaSourceType;

@@ -1,7 +1,6 @@
 import type { Server as IOServer, Socket } from "socket.io";
 
 import type Server from "../Server";
-import Gravatar from "../integrations/Gravatar";
 import type { RedisChatMessage } from "../interfaces/Redis";
 import type { ChatMessagePayload, ChatSendPayload, SocketErrorPayload } from "../interfaces/Socket";
 import RoomStateService from "../services/RoomStateService";
@@ -17,7 +16,6 @@ export default class ChatSocket {
 
     public static register(socket: Socket): void {
         socket.on("chat:send", async (data: ChatSendPayload) => {
-            // 1. Authenticate socket & derive user and room from session
             const session = await RoomStateService.getSocketSession(socket.id);
             const userId: number = socket.data?.userId || socket.data?.user?.id || session?.userId;
 
@@ -30,7 +28,6 @@ export default class ChatSocket {
                 return;
             }
 
-            // Derive room ID from session
             const roomId = session?.roomId || (data?.roomId ? Number(data.roomId) : null);
             if (!roomId) {
                 const errorPayload: SocketErrorPayload = {
@@ -50,9 +47,8 @@ export default class ChatSocket {
                 return;
             }
 
-            const roomKey = `room:${roomId}`;
+            const roomKey = RoomStateService.getRoomKey(roomId);
 
-            // 2. Enforce room membership context
             if (!socket.rooms.has(roomKey)) {
                 const errorPayload: SocketErrorPayload = {
                     code: "NOT_IN_ROOM",
@@ -62,7 +58,6 @@ export default class ChatSocket {
                 return;
             }
 
-            // 3. Resolve sender from active participant session in Redis
             const participant = await RoomStateService.getParticipant(roomId, userId);
             if (!participant) {
                 const errorPayload: SocketErrorPayload = {
@@ -73,7 +68,6 @@ export default class ChatSocket {
                 return;
             }
 
-            // 4. Validate message
             if (!data?.message || data.message.trim() === "") {
                 const errorPayload: SocketErrorPayload = {
                     code: "CHAT_EMPTY",
@@ -83,7 +77,6 @@ export default class ChatSocket {
                 return;
             }
 
-            // 5. Enforce Chat Rate Limit (1 message per second per user)
             const isAllowed = await RoomStateService.checkChatRateLimit(userId, 1);
             if (!isAllowed) {
                 const errorPayload: SocketErrorPayload = {
@@ -96,8 +89,8 @@ export default class ChatSocket {
             }
 
             const senderId = userId;
-            const senderName = participant.displayName || socket.data?.user?.displayName || socket.data?.user?.username || "";
-            const avatarUrl = participant.avatarUrl || socket.data?.user?.avatarUrl || Gravatar.getDefaultAvatarURL();
+            const senderName = participant.displayName || socket.data?.user?.displayName || "";
+            const avatarUrl = participant.avatarUrl || socket.data?.user?.avatarUrl;
 
             this.server.log("Socket:Chat", `Chat message in ${roomKey} from ${senderName} (${senderId}): ${data.message}`);
 
@@ -111,10 +104,8 @@ export default class ChatSocket {
                 createdAt: new Date().toISOString(),
             };
 
-            // 6. Persist message in Redis capped list (max 100)
             await RoomStateService.addMessage(roomId, messagePayload as RedisChatMessage, 100);
 
-            // 7. Broadcast to all clients in the room
             this.io.to(roomKey).emit("chat:new-message", messagePayload);
         });
     }

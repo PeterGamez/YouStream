@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 
 import type Server from "../Server";
-import type { UserInterface } from "../interfaces/Database";
+import type { UserSafeDTO } from "../interfaces/Database";
 import UserService from "../services/UserService";
 
 export default class Middleware {
@@ -48,22 +48,19 @@ export default class Middleware {
         });
     }
 
-    public async getUser(c: Context): Promise<UserInterface> {
+    public async getUser(c: Context): Promise<UserSafeDTO> {
         const cachedUser = c.get("authUser");
         if (cachedUser) {
             return cachedUser;
         }
 
         const payload = c.get("jwtPayload");
-        if (!payload || !payload.userId) {
+        if (!payload?.userId) {
             return null;
         }
-        const { userId } = payload;
 
-        const user = await UserService.getUser(userId);
-        if (user) {
-            c.set("authUser", user);
-        }
-        return user;
+        const userSafe = await UserService.getUser(payload.userId);
+        c.set("authUser", userSafe);
+        return userSafe;
     }
 }

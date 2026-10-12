@@ -8,12 +8,16 @@
 * **Multi-Source Media (รองรับวิดีโอหลากหลายแหล่ง):** Host สามารถเลือกแชร์วิดีโอได้ 2 รูปแบบ คือการใช้ลิงก์จาก YouTube หรือการนำเข้าไฟล์วิดีโอ (Local File) มาเปิดเอง
 * **Room Directory (หน้ารายการห้องรวม):** มีระบบหน้าล็อบบี้แสดงรายการห้องทั้งหมดที่กำลังเปิดสตรีมอยู่ เพื่อให้ผู้ใช้งานทั่วไปสามารถเลือกคลิกเข้าร่วมห้องและรับชมวิดีโอที่สนใจได้ทันที
 * **In-Room Live Chat (ระบบแชทสดในห้องสตรีม):** ผู้ชมและ Host สามารถส่งข้อความสนทนาและโต้ตอบกันได้แบบเรียลไทม์ระหว่างรับชมวิดีโอ พร้อมระบบป้องกันการสแปม (Rate Limiting) และการแคชข้อความล่าสุดสำหรับผู้ชมที่เพิ่งเข้าร่วมห้องใหม่ (Late-joiner)
+* **Multi-Tab Presence Support (รองรับการใช้งานหลายแท็บ):** ตรวจสอบ Socket ID ของผู้ใช้อย่างละเอียด ป้องกันการหลุดออกจากห้องโดยไม่ตั้งใจเมื่อปิดแท็บใดแท็บหนึ่ง
 
 ## Tech Stack
 * **Frontend:** Next.js
-* **Backend:** Hono
-* **Database & In-Memory Store:** MariaDB (Persistent Storage), Redis (Real-time State & Chat Cache)
-* **Real-time Communication:** Socket.io (สำหรับจัดการการซิงค์สถานะวิดีโอระหว่าง Host และ Client รวมทั้งระบบรับ-ส่งข้อความแชทแบบเรียลไทม์)
+* **Backend:** Hono / Bun Runtime
+* **Database & In-Memory Store:** 
+  * MariaDB / MySQL (Persistent Storage: ตาราง `user`, `room`, `media` ผ่านไดรเวอร์ `mysql2/promise`)
+  * Redis (In-Memory State & Cache: Real-time Playback State, Active Participants, Active Rooms, 100 Recent Messages Capped List, User Profile Cache, และ Chat Rate Limiting ผ่าน `ioredis`)
+* **Real-time Communication:** Socket.io (จัดการ Group Rooms, Video Synchronization, User Presence, และ Real-time Live Chat)
+* **Authentication & Security:** JSON Web Tokens (`hono/jwt`, HS256), Password Hashing (`bcrypt` ผ่าน Bun `password` API, Cost 12)
 
 ## ⚙️ How it Works
 
@@ -24,20 +28,20 @@
 
 *   **Step 1 - Input:** ผู้ควบคุมห้อง (Host) นำลิงก์ YouTube มาวางบนหน้าเว็บ (Next.js)
 *   **Step 2 - Extract:** Frontend จะทำการสกัดรหัสวิดีโอ (Video ID) ออกมาจากลิงก์
-*   **Step 3 - Emit:** เครื่องของ Host ส่ง Video ID และสถานะการเล่น (Play, Pause, Seek) ไปยัง Backend (Hono) ผ่าน `Socket.io`
-*   **Step 4 - Broadcast:** Backend ทำหน้าที่เป็นตัวกลาง กระจาย (Broadcast) ข้อมูลชุดนี้ไปยังผู้ชมทุกคนที่เชื่อมต่ออยู่ในห้องเดียวกัน
-*   **Step 5 - Sync:** ตัวเล่นวิดีโอ (YouTube IFrame API) ฝั่งผู้ชมจะเปลี่ยนวิดีโอและซิงค์เวลาให้ตรงกับ Host แบบเรียลไทม์
+*   **Step 3 - Emit:** เครื่องของ Host ส่ง Event `video:change` พร้อมข้อมูล `{ roomId, sourceType: 'youtube', youtubeId, title }` ไปยัง Backend (Hono) ผ่าน `Socket.io`
+*   **Step 4 - Broadcast:** Backend บันทึกข้อมูลมีเดียลงฐานข้อมูล MariaDB (ตาราง `room`) ควบคู่กับแคชสถานะลง Redis (`room:{roomId}:playback`) แบบ Transactional แล้วจึงกระจาย Event `video:update` ไปยังทุกคนในห้อง
+*   **Step 5 - Sync:** ตัวเล่นวิดีโอ (YouTube IFrame API) ฝั่งผู้ชมจะโหลด Video ID เดียวกัน เมื่อ Host สั่ง Play/Pause/Seek จะส่ง Event `video:control` และ Backend จะกระจาย `video:sync` เพื่อปรับเวลาให้ตรงกับ Host ทันที
 
 ---
 
-### 2. การนำไฟล์วิดีโอมาเอง (Local File via Server Upload)
-สำหรับการนำไฟล์จากเครื่องคอมพิวเตอร์มาเปิด ระบบจะใช้วิธีเปลี่ยนไฟล์ให้เป็น Public URL ก่อน เพื่อให้ทุกคนในห้องสามารถเข้าถึงไฟล์เดียวกันได้
+### 2. การนำไฟล์วิดีโอมาเอง (Local File via Server Upload & Stream)
+สำหรับการนำไฟล์จากเครื่องคอมพิวเตอร์มาเปิด ระบบจะใช้วิธีอัปโหลดเข้าสู่ระบบเพื่อสร้าง Streaming URL สำหรับการสตรีมร่วมกัน
 
-*   **Step 1 - Select & Upload:** Host เลือกไฟล์วิดีโอจากเครื่อง (รองรับ .mp4, .webm ฯลฯ **ขนาดไฟล์จำกัดไม่เกิน 500MB**) และทำการอัปโหลดผ่าน API ไปยัง Backend (หรือ Cloud Storage)
-*   **Step 2 - Get URL:** เมื่ออัปโหลดเสร็จสมบูรณ์ Server จะตอบกลับ (Response) เป็น URL ของไฟล์วิดีโอนั้นกลับมาที่ Host
-*   **Step 3 - Emit URL:** เครื่องของ Host จะนำ URL ที่ได้ ส่งเข้าไปในห้องผ่าน `Socket.io`
-*   **Step 4 - Broadcast:** Backend กระจาย URL นั้นให้ผู้ชมทุกคนในห้อง
-*   **Step 5 - Stream & Sync:** เบราว์เซอร์ฝั่งผู้ชมจะนำ URL ไปใส่ในแท็ก `<video>` เพื่อสตรีมไฟล์จาก Server พร้อมทั้งซิงค์คำสั่ง (Play, Pause, Volume, Seek) จาก Host แบบเรียลไทม์
+*   **Step 1 - Select & Upload:** Host เลือกไฟล์วิดีโอจากเครื่อง (รองรับ `.mp4`, `.webm` **ขนาดไฟล์จำกัดไม่เกิน 500MB**) และทำการอัปโหลดผ่าน `POST /media/upload` (Multipart Form Data)
+*   **Step 2 - Store & Response:** Backend ทำการตรวจสอบ MIME Type, จำกัดขนาดด้วย Stream Pipeline, บันทึกข้อมูลลงฐานข้อมูล MariaDB (ตาราง `media`) และส่ง URL ตอบกลับ เช่น `/media/stream/{uniqueFilename}`
+*   **Step 3 - Emit URL:** เครื่องของ Host ส่ง Event `video:change` พร้อม `{ roomId, sourceType: 'local_file', fileUrl, title, mediaId }` ผ่าน `Socket.io`
+*   **Step 4 - Broadcast:** Backend บันทึกลง MariaDB (ตาราง `room`) และ Redis แบบ Transactional (พร้อมกลไก Rollback หากเกิดข้อผิดพลาด) แล้วจึงกระจาย Event `video:update` ให้ทุกคนในห้อง
+*   **Step 5 - Stream & Sync:** เบราว์เซอร์ฝั่งผู้ชมจะนำ `fileUrl` ไปใส่ในแท็ก `<video>` เพื่อสตรีมไฟล์จาก Endpoint `/media/stream/:filename` (รองรับ HTTP Range RFC 9110 แบบ 206 Partial Content พร้อม Range Clamping สำหรับการ Buffering ที่ราบรื่น) พร้อมทั้งรับ Event `video:sync` เพื่อซิงค์คำสั่งจาก Host แบบเรียลไทม์
 
 ---
 
@@ -45,8 +49,14 @@
 ระบบแชทเปิดโอกาสให้ Host และผู้ชมสื่อสารกันได้แบบเรียลไทม์ควบคู่กับการรับชมวิดีโอ โดยใช้ Socket.io ร่วมกับ In-Memory Cache (Redis) เพื่อความเร็วสูงสุดและลดภาระฐานข้อมูล
 
 *   **Step 1 - Send Message:** ผู้ใช้งาน (Host หรือ Viewer) พิมพ์ข้อความในกล่องแชทบนหน้าเว็บ (Next.js) และกดส่ง
-*   **Step 2 - Emit:** เครื่องของผู้ส่งจะส่ง Event `chat:send` พร้อมข้อมูลข้อความไปยัง Backend (Hono) ผ่าน `Socket.io`
-*   **Step 3 - Rate Limit & Validate:** Backend ตรวจสอบสิทธิ์ผู้ส่ง และเช็ค Rate Limiting ผ่าน Redis (`ratelimit:chat:{userId}`) เพื่อป้องกันสแปม (จำกัด 1 ข้อความ / 1 วินาที)
-*   **Step 4 - Cache Message:** Backend จัดรูปแบบข้อมูลข้อความ (แนบ Sender ID, Display Name, Avatar, Timestamp) และบันทึกลง Redis (`room:{roomId}:messages`) แบบ Capped List (เก็บ 100 ข้อความล่าสุด)
-*   **Step 5 - Broadcast:** Backend กระจาย Event `chat:message` พร้อมข้อมูลข้อความไปยังทุกคนที่อยู่ในห้องเดียวกันแบบเรียลไทม์
-*   **Step 6 - Render & Late-joiner:** เบราว์เซอร์ฝั่งผู้ชมแสดงผลข้อความในช่องแชททันที และหากมีผู้ชมใหม่เข้าห้องมาภายหลัง (Late-joiner) ระบบจะดึงประวัติแชท 100 ข้อความล่าสุดจาก Redis มาแสดงให้อัตโนมัติ
+*   **Step 2 - Emit:** เครื่องของผู้ส่งจะส่ง Event `chat:send` พร้อมข้อมูล `{ roomId, message }` ไปยัง Backend ผ่าน `Socket.io`
+*   **Step 3 - Rate Limit & Validate:** Backend ตรวจสอบสิทธิ์ผู้ส่ง และเช็ค Rate Limiting ผ่าน Redis (`rate_limit:chat:{userId}`) เพื่อป้องกันสแปม (จำกัด 1 ข้อความ / 1 วินาที หากส่งถี่เกินไปจะส่ง Event `chat:error` แจ้งเตือน)
+*   **Step 4 - Cache Message:** Backend จัดรูปแบบข้อมูลข้อความ (`id`, `senderId`, `senderName`, `avatarUrl`, `message`, `messageType`, `createdAt`) และบันทึกลง Redis (`room:{roomId}:messages`) แบบ Capped List (เก็บ 100 ข้อความล่าสุด)
+*   **Step 5 - Broadcast:** Backend กระจาย Event `chat:new-message` พร้อมข้อมูลข้อความไปยังทุกคนที่อยู่ในห้องเดียวกันแบบเรียลไทม์
+*   **Step 6 - Render & Late-joiner:** เบราว์เซอร์ฝั่งผู้ชมแสดงผลข้อความในช่องแชททันที และหากมีผู้ชมใหม่เข้าห้องมาภายหลัง (Late-joiner) ระบบจะดึงประวัติแชท 100 ข้อความล่าสุดจาก Redis มาแสดงให้อัตโนมัติผ่าน Event `room:joined`
+
+---
+
+## 📖 Complete Documentation
+สำหรับเอกสารข้อกำหนดความต้องการของซอฟต์แวร์ฉบับสมบูรณ์ (Software Requirements Specification) ซึ่งประกอบด้วย Data Dictionary, ER Diagram, สเปกของ In-Memory State บน Redis, รายการ Socket Events ทั้งหมด และสเปกของ RESTful API อย่างละเอียด สามารถศึกษาเพิ่มเติมได้ที่:
+* 📄 [SRS.md (Software Requirements Specification)](SRS.md)

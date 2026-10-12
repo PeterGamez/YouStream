@@ -40,7 +40,6 @@ export default class MediaRoute implements RouteInterface {
     }
 
     private registerRoutes() {
-        // Public streaming endpoint for HTML5 video players (No JWT Auth)
         this.app.get("/stream/:filename", async (c) => {
             try {
                 const filename = c.req.param("filename");
@@ -62,12 +61,35 @@ export default class MediaRoute implements RouteInterface {
                 const mimeType = ext === ".webm" ? "video/webm" : "video/mp4";
 
                 const range = c.req.header("range");
-                if (range) {
-                    const parts = range.replace(/bytes=/, "").split("-");
-                    const start = parseInt(parts[0], 10);
-                    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+                if (range && range.startsWith("bytes=")) {
+                    const parts = range
+                        .replace(/bytes=/, "")
+                        .trim()
+                        .split("-");
+                    let start: number;
+                    let end: number;
 
-                    if (start >= fileSize || end >= fileSize) {
+                    if (parts[0] === "") {
+                        const suffix = parseInt(parts[1], 10);
+                        if (isNaN(suffix) || suffix <= 0) {
+                            return c.text("Requested range not satisfiable", 416, {
+                                "Content-Range": `bytes */${fileSize}`,
+                            });
+                        }
+                        start = Math.max(0, fileSize - suffix);
+                        end = fileSize - 1;
+                    } else {
+                        start = parseInt(parts[0], 10);
+                        const rawEnd = parts[1] && parts[1].trim() !== "" ? parseInt(parts[1], 10) : fileSize - 1;
+                        if (isNaN(start) || isNaN(rawEnd)) {
+                            return c.text("Requested range not satisfiable", 416, {
+                                "Content-Range": `bytes */${fileSize}`,
+                            });
+                        }
+                        end = Math.min(rawEnd, fileSize - 1);
+                    }
+
+                    if (isNaN(start) || isNaN(end) || start < 0 || start > end || start >= fileSize) {
                         return c.text("Requested range not satisfiable", 416, {
                             "Content-Range": `bytes */${fileSize}`,
                         });
@@ -84,6 +106,7 @@ export default class MediaRoute implements RouteInterface {
                             "Accept-Ranges": "bytes",
                             "Content-Length": chunkSize.toString(),
                             "Content-Type": mimeType,
+                            "Cache-Control": "public, max-age=3600",
                         },
                     });
                 } else {
@@ -96,16 +119,17 @@ export default class MediaRoute implements RouteInterface {
                             "Accept-Ranges": "bytes",
                             "Content-Length": fileSize.toString(),
                             "Content-Type": mimeType,
+                            "Cache-Control": "public, max-age=3600",
                         },
                     });
                 }
-            } catch (error: any) {
-                this.server.error("Media Route", `Stream error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Media Route", `Stream error: ${message}`);
                 return c.json({ error: "Failed to stream media" }, 500);
             }
         });
 
-        // Apply JWT Authentication to all subsequent media management endpoints
         this.app.use("*", this.server.Middleware.auth());
 
         this.app.post(
@@ -159,10 +183,11 @@ export default class MediaRoute implements RouteInterface {
 
                     const writeStream = createWriteStream(targetPath);
                     try {
-                        await pipeline(Readable.fromWeb(file.stream() as any), sizeLimiter, writeStream);
-                    } catch (streamError: any) {
+                        await pipeline(Readable.fromWeb(file.stream()), sizeLimiter, writeStream);
+                    } catch (streamError) {
+                        const streamMsg = streamError instanceof Error ? streamError.message : String(streamError);
                         await unlink(targetPath).catch(() => {});
-                        if (bytesWritten > MediaRoute.MAX_FILE_SIZE || streamError?.message?.includes("exceeds")) {
+                        if (bytesWritten > MediaRoute.MAX_FILE_SIZE || streamMsg.includes("exceeds")) {
                             return c.json({ error: "File exceeds maximum size limit of 500MB" }, 413);
                         }
                         throw streamError;
@@ -186,8 +211,9 @@ export default class MediaRoute implements RouteInterface {
                         },
                         201
                     );
-                } catch (error: any) {
-                    this.server.error("Media Route", `Upload error: ${error?.message || error}`);
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    this.server.error("Media Route", `Upload error: ${message}`);
                     return c.json({ error: "Failed to upload file" }, 500);
                 }
             }
@@ -236,8 +262,9 @@ export default class MediaRoute implements RouteInterface {
                     },
                     201
                 );
-            } catch (error: any) {
-                this.server.error("Media Route", `Add YouTube error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Media Route", `Add YouTube error: ${message}`);
                 return c.json({ error: "Failed to add YouTube video" }, 500);
             }
         });
@@ -254,8 +281,9 @@ export default class MediaRoute implements RouteInterface {
                 }
 
                 return c.json(mediaList);
-            } catch (error: any) {
-                this.server.error("Media Route", `Get /media error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Media Route", `Get /media error: ${message}`);
                 return c.json({ error: "Failed to retrieve media list" }, 500);
             }
         });
@@ -273,8 +301,9 @@ export default class MediaRoute implements RouteInterface {
                 }
 
                 return c.json(media);
-            } catch (error: any) {
-                this.server.error("Media Route", `Get /media/:id error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Media Route", `Get /media/:id error: ${message}`);
                 return c.json({ error: "Failed to retrieve media details" }, 500);
             }
         });
@@ -303,8 +332,9 @@ export default class MediaRoute implements RouteInterface {
                 if (media.filePath && existsSync(media.filePath)) {
                     try {
                         unlinkSync(media.filePath);
-                    } catch (fsErr: any) {
-                        this.server.warn("Media Route", `Failed to unlink file ${media.filePath}: ${fsErr?.message || fsErr}`);
+                    } catch (fsErr) {
+                        const fsMsg = fsErr instanceof Error ? fsErr.message : String(fsErr);
+                        this.server.warn("Media Route", `Failed to unlink file ${media.filePath}: ${fsMsg}`);
                     }
                 }
 
@@ -316,8 +346,9 @@ export default class MediaRoute implements RouteInterface {
                     message: "Media deleted successfully",
                     mediaId: id,
                 });
-            } catch (error: any) {
-                this.server.error("Media Route", `Delete /media/:id error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Media Route", `Delete /media/:id error: ${message}`);
                 return c.json({ error: "Failed to delete media" }, 500);
             }
         });

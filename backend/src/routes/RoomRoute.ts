@@ -2,12 +2,12 @@ import { Hono } from "hono";
 import type { BlankEnv, BlankSchema } from "hono/types";
 
 import type Server from "../Server";
-import Gravatar from "../integrations/Gravatar";
-import type { RoomMediaType, RoomSafeDTO } from "../interfaces/Database";
+import type { RoomHostDTO, RoomMediaType, RoomSafeDTO } from "../interfaces/Database";
 import type { RouteInterface } from "../interfaces/Route";
 import type { RoomType } from "../interfaces/Type";
 import RoomModel from "../models/RoomModel";
 import UserModel from "../models/UserModel";
+import RoomReconciliationService from "../services/RoomReconciliationService";
 import RoomStateService from "../services/RoomStateService";
 import RoomSocket from "../sockets/RoomSocket";
 
@@ -31,10 +31,8 @@ export default class RoomRoute implements RouteInterface {
                 const search = (c.req.query("search") || "").trim().toLowerCase();
                 const mediaType = c.req.query("mediaType") || "all";
 
-                const allRooms = await RoomModel.selectAllRoom();
-                const filteredRooms = allRooms.filter((r) => {
-                    if (r.status !== "active") return false;
-
+                const activeRooms = await RoomModel.selectActiveRoomsWithHost();
+                const filteredRooms = activeRooms.filter((r) => {
                     if (search) {
                         const titleMatch = (r.title || "").toLowerCase().includes(search);
                         const codeMatch = (r.roomCode || "").toLowerCase().includes(search);
@@ -50,25 +48,6 @@ export default class RoomRoute implements RouteInterface {
 
                 const roomsWithDetails = await Promise.all(
                     filteredRooms.map(async (room) => {
-                        let host = {
-                            id: room.hostId,
-                            displayName: "Host",
-                            avatarUrl: Gravatar.getDefaultAvatarURL(),
-                        };
-
-                        try {
-                            const hostUser = await UserModel.selectUser(room.hostId);
-                            if (hostUser) {
-                                host = {
-                                    id: hostUser.id,
-                                    displayName: hostUser.displayName,
-                                    avatarUrl: hostUser.avatarUrl,
-                                };
-                            }
-                        } catch {
-                            // ignore host lookup error
-                        }
-
                         let participantCount = 0;
                         try {
                             participantCount = await RoomStateService.getParticipantCount(room.id);
@@ -76,13 +55,13 @@ export default class RoomRoute implements RouteInterface {
                             // ignore redis error
                         }
 
-                        const safeRoom: RoomSafeDTO & { host: typeof host; participantCount: number } = {
+                        const safeRoom: RoomSafeDTO & { host: RoomHostDTO; participantCount: number } = {
                             id: room.id,
                             roomCode: room.roomCode,
                             title: room.title,
                             description: room.description,
                             hostId: room.hostId,
-                            host,
+                            host: room.host,
                             status: room.status,
                             mediaType: room.mediaType,
                             currentMediaId: room.currentMediaId,
@@ -105,8 +84,9 @@ export default class RoomRoute implements RouteInterface {
                         mediaType,
                     },
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get /rooms error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get /rooms error: ${message}`);
                 return c.json({ error: "Failed to retrieve rooms" }, 500);
             }
         });
@@ -176,8 +156,9 @@ export default class RoomRoute implements RouteInterface {
                         updatedBy: user.id,
                         updatedAt: new Date().toISOString(),
                     });
-                } catch (redisErr: any) {
-                    this.server.warn("Room Route", `Redis init error for room ${roomId}: ${redisErr?.message || redisErr}`);
+                } catch (redisErr) {
+                    const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+                    this.server.warn("Room Route", `Redis init error for room ${roomId}: ${redisMsg}`);
                 }
 
                 const createdRoom = await RoomModel.selectRoom(roomId);
@@ -206,8 +187,9 @@ export default class RoomRoute implements RouteInterface {
                     },
                     201
                 );
-            } catch (error: any) {
-                this.server.error("Room Route", `Post /rooms error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Post /rooms error: ${message}`);
                 return c.json({ error: "Failed to create room" }, 500);
             }
         });
@@ -245,6 +227,11 @@ export default class RoomRoute implements RouteInterface {
                     // ignore
                 }
 
+                const effectiveMedia = await RoomReconciliationService.getEffectiveRoomMedia(room.id, {
+                    mediaType: room.mediaType,
+                    currentMediaId: room.currentMediaId,
+                });
+
                 const safeRoom: RoomSafeDTO & { host?: typeof host; participantCount: number } = {
                     id: room.id,
                     roomCode: room.roomCode,
@@ -253,8 +240,8 @@ export default class RoomRoute implements RouteInterface {
                     hostId: room.hostId,
                     host,
                     status: room.status,
-                    mediaType: room.mediaType,
-                    currentMediaId: room.currentMediaId,
+                    mediaType: effectiveMedia.mediaType,
+                    currentMediaId: effectiveMedia.currentMediaId,
                     isPrivate: room.isPrivate,
                     participantCount,
                     maxParticipants: room.maxParticipants,
@@ -264,8 +251,9 @@ export default class RoomRoute implements RouteInterface {
                 };
 
                 return c.json({ room: safeRoom });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get /rooms/code/:code error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get /rooms/code/:code error: ${message}`);
                 return c.json({ error: "Failed to retrieve room by code" }, 500);
             }
         });
@@ -303,6 +291,11 @@ export default class RoomRoute implements RouteInterface {
                     // ignore
                 }
 
+                const effectiveMedia = await RoomReconciliationService.getEffectiveRoomMedia(room.id, {
+                    mediaType: room.mediaType,
+                    currentMediaId: room.currentMediaId,
+                });
+
                 const safeRoom: RoomSafeDTO & { host?: typeof host; participantCount: number } = {
                     id: room.id,
                     roomCode: room.roomCode,
@@ -311,8 +304,8 @@ export default class RoomRoute implements RouteInterface {
                     hostId: room.hostId,
                     host,
                     status: room.status,
-                    mediaType: room.mediaType,
-                    currentMediaId: room.currentMediaId,
+                    mediaType: effectiveMedia.mediaType,
+                    currentMediaId: effectiveMedia.currentMediaId,
                     isPrivate: room.isPrivate,
                     participantCount,
                     maxParticipants: room.maxParticipants,
@@ -322,8 +315,9 @@ export default class RoomRoute implements RouteInterface {
                 };
 
                 return c.json({ room: safeRoom });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get /rooms/:id error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get /rooms/:id error: ${message}`);
                 return c.json({ error: "Failed to retrieve room" }, 500);
             }
         });
@@ -362,8 +356,9 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 return c.json({ verified: true, roomId: room.id });
-            } catch (error: any) {
-                this.server.error("Room Route", `Verify passcode error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Verify passcode error: ${message}`);
                 return c.json({ error: "Failed to verify room passcode" }, 500);
             }
         });
@@ -424,12 +419,27 @@ export default class RoomRoute implements RouteInterface {
                     const isPrivate = Boolean(body.isPrivate);
                     fieldsToUpdate.isPrivate = isPrivate;
                     if (isPrivate) {
-                        if (body.passcode) {
-                            fieldsToUpdate.passcode = await this.server.Password.hash(body.passcode.trim());
+                        const passcode = body.passcode?.trim();
+                        if (passcode) {
+                            if (passcode.length < 4) {
+                                return c.json({ error: "Private rooms require a passcode of at least 4 characters" }, 400);
+                            }
+                            fieldsToUpdate.passcode = await this.server.Password.hash(passcode);
+                        } else if (!room.isPrivate || !room.passcode) {
+                            return c.json({ error: "Private rooms require a passcode of at least 4 characters" }, 400);
                         }
                     } else {
                         fieldsToUpdate.passcode = null;
                     }
+                } else if (body.passcode !== undefined) {
+                    if (!room.isPrivate) {
+                        return c.json({ error: "Cannot set a passcode for a public room" }, 400);
+                    }
+                    const passcode = body.passcode?.trim();
+                    if (!passcode || passcode.length < 4) {
+                        return c.json({ error: "Private rooms require a passcode of at least 4 characters" }, 400);
+                    }
+                    fieldsToUpdate.passcode = await this.server.Password.hash(passcode);
                 }
 
                 if (Object.keys(fieldsToUpdate).length > 0) {
@@ -457,8 +467,9 @@ export default class RoomRoute implements RouteInterface {
                     message: "Room updated successfully",
                     room: safeRoom,
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `Update room error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Update room error: ${message}`);
                 return c.json({ error: "Failed to update room" }, 500);
             }
         });
@@ -488,14 +499,16 @@ export default class RoomRoute implements RouteInterface {
 
                 try {
                     await RoomStateService.cleanupRoom(id);
-                } catch (redisErr: any) {
-                    this.server.warn("Room Route", `Redis cleanup error for room ${id}: ${redisErr?.message || redisErr}`);
+                } catch (redisErr) {
+                    const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+                    this.server.warn("Room Route", `Redis cleanup error for room ${id}: ${redisMsg}`);
                 }
 
                 try {
                     RoomSocket.endRoom(id, "Room has been ended by the host");
-                } catch (socketErr: any) {
-                    this.server.warn("Room Route", `Socket endRoom emit error: ${socketErr?.message || socketErr}`);
+                } catch (socketErr) {
+                    const socketMsg = socketErr instanceof Error ? socketErr.message : String(socketErr);
+                    this.server.warn("Room Route", `Socket endRoom emit error: ${socketMsg}`);
                 }
 
                 this.server.log("Room Route", `Room ${id} ended by user ${user.id}`);
@@ -505,8 +518,9 @@ export default class RoomRoute implements RouteInterface {
                     roomId: id,
                     endedAt: new Date().toISOString(),
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `End room error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `End room error: ${message}`);
                 return c.json({ error: "Failed to end room" }, 500);
             }
         });
@@ -537,8 +551,9 @@ export default class RoomRoute implements RouteInterface {
                     roomId: id,
                     playbackState,
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get playback error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get playback error: ${message}`);
                 return c.json({ error: "Failed to retrieve playback state" }, 500);
             }
         });
@@ -557,8 +572,9 @@ export default class RoomRoute implements RouteInterface {
                     count: participants.length,
                     participants,
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get participants error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get participants error: ${message}`);
                 return c.json({ error: "Failed to retrieve room participants" }, 500);
             }
         });
@@ -576,8 +592,9 @@ export default class RoomRoute implements RouteInterface {
                     roomId: id,
                     messages,
                 });
-            } catch (error: any) {
-                this.server.error("Room Route", `Get messages error: ${error?.message || error}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get messages error: ${message}`);
                 return c.json({ error: "Failed to retrieve room messages" }, 500);
             }
         });

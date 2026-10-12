@@ -1,9 +1,9 @@
 import type { JWTPayload } from "./interfaces/Auth";
-import type { UserInterface } from "./interfaces/Database";
+import type { UserSafeDTO } from "./interfaces/Database";
 
 declare module "hono" {
     interface ContextVariableMap {
         jwtPayload: JWTPayload;
-        authUser: UserInterface;
+        authUser: UserSafeDTO;
     }
 }

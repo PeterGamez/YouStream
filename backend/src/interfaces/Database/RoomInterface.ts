@@ -25,16 +25,6 @@ export interface RoomHostDTO {
     avatarUrl: string;
 }
 
-export interface RoomListDTO extends RoomSafeDTO {
-    host: RoomHostDTO;
-    participantCount: number;
-}
-
-export interface RoomDetailDTO extends RoomSafeDTO {
-    host?: RoomHostDTO;
-    participantCount?: number;
-}
-
 export interface RoomRawInterface extends InterfaceBaseRaw {
     room_code: string;
     title: string;
@@ -43,9 +33,13 @@ export interface RoomRawInterface extends InterfaceBaseRaw {
     status: RoomStatus;
     media_type: RoomMediaType;
     current_media_id: number;
-    is_private: boolean | number;
+    is_private: boolean;
     passcode: string;
-    passcode_hash?: string;
     max_participants: number;
     ended_at: Date;
+}
+
+export interface RoomWithHostRow extends RoomRawInterface {
+    host_display_name: string;
+    host_avatar_url: string;
 }

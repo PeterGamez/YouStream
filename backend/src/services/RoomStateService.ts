@@ -20,6 +20,7 @@ export default class RoomStateService {
     }
 
     public static readonly KEYS = {
+        roomChannel: (roomId: number | string) => `room:${roomId}`,
         roomPlayback: (roomId: number | string) => `room:${roomId}:playback`,
         roomParticipants: (roomId: number | string) => `room:${roomId}:participants`,
         roomParticipantField: (userId: number | string) => `user:${userId}`,
@@ -29,6 +30,10 @@ export default class RoomStateService {
         chatRateLimit: (userId: number | string) => `rate_limit:chat:${userId}`,
         userCache: (userId: number | string) => `user:${userId}`,
     };
+
+    public static getRoomKey(roomId: number | string): string {
+        return this.KEYS.roomChannel(roomId);
+    }
 
     /* -------------------------------------------------------------------------- */
     /*                       1. Video Playback State (Hash)                       */
@@ -49,7 +54,7 @@ export default class RoomStateService {
         if (state.updatedAt !== undefined) data.updated_at = state.updatedAt;
 
         if (Object.keys(data).length > 0) {
-            await this.Redis.hset(key, data as Record<string, string>);
+            await this.Redis.hset(key, data);
         }
     }
 
