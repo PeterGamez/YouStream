@@ -23,7 +23,7 @@
     "forceConsistentCasingInFileNames": true,
     /* Type Checking */
     "strict": true,
-    "noImplicitAny": false,
+    "noImplicitAny": true,
     "strictNullChecks": false,
     "noUnusedLocals": true,
     "noUnusedParameters": false,
