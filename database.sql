@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS `room` (
     `status` ENUM('active', 'ended') NOT NULL DEFAULT 'active',
     `media_type` ENUM('none', 'youtube', 'local_file') NOT NULL DEFAULT 'none',
     `current_media_id` INT NULL DEFAULT NULL,
-    `is_private` BOOLEAN NOT NULL DEFAULT FALSE,
+    `is_private` TINYINT(1) NOT NULL DEFAULT 0,
     `passcode` VARCHAR(255) NULL DEFAULT NULL,
     `max_participants` INT NOT NULL DEFAULT 50,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
