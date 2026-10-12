@@ -10,15 +10,8 @@ export default class UserService {
         const cached = await RedisService.get<string>(`${this.USER_CACHE_PREFIX}${userId}`);
         if (cached) {
             try {
-                const raw = JSON.parse(cached);
-                return {
-                    id: raw.id,
-                    username: raw.username,
-                    email: raw.email,
-                    displayName: raw.display_name,
-                    avatarUrl: raw.avatar_url,
-                    role: raw.role,
-                };
+                const userSafe = JSON.parse(cached);
+                return userSafe;
             } catch {
                 // ignore parse failure and query db
             }
@@ -34,7 +27,7 @@ export default class UserService {
     }
 
     public static async setUser(userId: number, user: UserInterface): Promise<void> {
-        const rawUser: UserSafeDTO = {
+        const userSafe: UserSafeDTO = {
             id: user.id,
             username: user.username,
             email: user.email,
@@ -42,7 +35,7 @@ export default class UserService {
             avatarUrl: user.avatarUrl,
             role: user.role,
         };
-        await RedisService.set(`${this.USER_CACHE_PREFIX}${userId}`, JSON.stringify(rawUser));
+        await RedisService.set(`${this.USER_CACHE_PREFIX}${userId}`, JSON.stringify(userSafe));
         await RedisService.expire(`${this.USER_CACHE_PREFIX}${userId}`, this.USER_CACHE_TTL);
     }
 
