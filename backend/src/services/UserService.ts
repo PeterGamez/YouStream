@@ -1,3 +1,5 @@
+import type { Socket } from "socket.io";
+
 import type { UserSafeDTO } from "../interfaces/Database";
 import UserModel from "../models/UserModel";
 import RedisService from "./RedisService";
@@ -42,5 +44,28 @@ export default class UserService {
 
     public static async delUser(userId: number): Promise<void> {
         await RedisService.del(`${this.USER_CACHE_PREFIX}${userId}`);
+    }
+
+    public static async revalidateSocketUser(socket: Socket): Promise<UserSafeDTO | null> {
+        const userId: number = socket.data?.userId ?? socket.data?.user?.id;
+        if (!userId) {
+            return null;
+        }
+
+        const freshUser = await this.getUser(userId);
+        if (!freshUser) {
+            delete socket.data.user;
+            delete socket.data.userId;
+            socket.emit("error", {
+                code: "AUTH_REVOKED",
+                message: "User session revoked or user account no longer exists",
+            });
+            socket.disconnect(true);
+            return null;
+        }
+
+        socket.data.user = freshUser;
+        socket.data.userId = freshUser.id;
+        return freshUser;
     }
 }

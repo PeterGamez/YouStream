@@ -9,6 +9,7 @@ import MediaModel from "../models/MediaModel";
 import RoomModel from "../models/RoomModel";
 import RoomReconciliationService from "../services/RoomReconciliationService";
 import RoomStateService from "../services/RoomStateService";
+import UserService from "../services/UserService";
 
 export default class VideoSocket {
     private static io: IOServer;
@@ -41,7 +42,15 @@ export default class VideoSocket {
                 return;
             }
 
-            await RoomReconciliationService.reconcileRoom(roomId);
+            const reconciled = await RoomReconciliationService.reconcileRoom(roomId);
+            if (!reconciled) {
+                const errorPayload: SocketErrorPayload = {
+                    code: "RECONCILIATION_PENDING",
+                    message: "Room media reconciliation is pending. Please retry shortly.",
+                };
+                socket.emit("error", errorPayload);
+                return;
+            }
 
             if (data?.sourceType !== "youtube" && data?.sourceType !== "local_file") {
                 const errorPayload: SocketErrorPayload = {
@@ -85,8 +94,36 @@ export default class VideoSocket {
                     });
                     return;
                 }
-            } else if (data.sourceType === "youtube" && data.youtubeId) {
-                media = await MediaModel.selectMediaByYoutubeVideoId(data.youtubeId);
+            } else if (data.sourceType === "youtube") {
+                let cleanYoutubeId = data.youtubeId?.trim();
+                if (cleanYoutubeId) {
+                    const match = cleanYoutubeId.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                    if (match && match[1]) {
+                        cleanYoutubeId = match[1];
+                    }
+                }
+
+                if (!cleanYoutubeId) {
+                    socket.emit("error", {
+                        code: "INVALID_YOUTUBE_ID",
+                        message: "A valid YouTube video ID is required",
+                    });
+                    return;
+                }
+
+                media = await MediaModel.selectMediaByYoutubeVideoId(cleanYoutubeId);
+                if (!media) {
+                    try {
+                        const sourceUrl = `https://www.youtube.com/watch?v=${cleanYoutubeId}`;
+                        const title = data.title?.trim() || "YouTube Video";
+                        const mediaId = await MediaModel.createMedia(authCheck.userId, "youtube", title, sourceUrl, cleanYoutubeId, null, null, null, null);
+                        media = await MediaModel.selectMedia(mediaId);
+                    } catch (createErr) {
+                        const createMsg = createErr instanceof Error ? createErr.message : String(createErr);
+                        this.server.warn("Socket:Video", `Auto-registration of YouTube video ${cleanYoutubeId} failed: ${createMsg}. Retrying lookup.`);
+                        media = await MediaModel.selectMediaByYoutubeVideoId(cleanYoutubeId);
+                    }
+                }
             }
 
             if (!media) {
@@ -191,6 +228,8 @@ export default class VideoSocket {
                         attempts: maxRollbackAttempts,
                         lastError: lastRollbackError?.message || "Immediate rollback failed",
                     });
+                } else {
+                    await RoomReconciliationService.cancelRollback(roomId);
                 }
 
                 socket.emit("error", {
@@ -199,6 +238,8 @@ export default class VideoSocket {
                 });
                 return;
             }
+
+            await RoomReconciliationService.cancelRollback(roomId);
 
             const { roomKey, userId } = authCheck;
             this.server.log("Socket:Video", `Video changed in ${roomKey} by host ${userId}: ${media.sourceType} (mediaId: ${media.id})`);
@@ -229,7 +270,15 @@ export default class VideoSocket {
             }
 
             const { roomKey, userId, roomId } = authCheck;
-            await RoomReconciliationService.reconcileRoom(roomId);
+            const reconciled = await RoomReconciliationService.reconcileRoom(roomId);
+            if (!reconciled) {
+                const errorPayload: SocketErrorPayload = {
+                    code: "RECONCILIATION_PENDING",
+                    message: "Room media reconciliation is pending. Please retry shortly.",
+                };
+                socket.emit("error", errorPayload);
+                return;
+            }
             this.server.log("Socket:Video", `Video control in ${roomKey} by host ${userId}: ${data.action} at ${data.currentTime}s`);
 
             const isPlaying = data.action === "play" ? true : data.action === "pause" ? false : undefined;
@@ -276,6 +325,7 @@ export default class VideoSocket {
         const session = await RoomStateService.getSocketSession(socket.id);
         if (!userId && session?.userId) {
             userId = session.userId;
+            socket.data.userId = userId;
         }
 
         if (!userId) {
@@ -287,6 +337,19 @@ export default class VideoSocket {
                 },
             };
         }
+
+        const freshUser = await UserService.revalidateSocketUser(socket);
+        if (!freshUser) {
+            return {
+                success: false,
+                error: {
+                    code: "UNAUTHORIZED",
+                    message: "Authentication required or user session has expired",
+                },
+            };
+        }
+
+        userId = freshUser.id;
 
         const roomKey = RoomStateService.getRoomKey(numericRoomId);
 
@@ -301,18 +364,24 @@ export default class VideoSocket {
             };
         }
 
-        if (socket.data?.user?.role === "admin") {
+        const room = await RoomModel.selectRoom(numericRoomId);
+        const isActualHost = room && room.hostId === userId;
+        const isAdmin = freshUser.role === "admin";
+
+        if (isAdmin || isActualHost) {
             return { success: true, userId, roomKey, roomId: numericRoomId };
         }
 
         const participant = await RoomStateService.getParticipant(numericRoomId, userId);
         if (participant?.role === "host") {
-            return { success: true, userId, roomKey, roomId: numericRoomId };
-        }
-
-        const room = await RoomModel.selectRoom(numericRoomId);
-        if (room && room.hostId === userId) {
-            return { success: true, userId, roomKey, roomId: numericRoomId };
+            participant.role = "viewer";
+            await RoomStateService.addParticipant(numericRoomId, participant);
+            if (this.io) {
+                this.io.to(roomKey).emit("room:participant-updated", {
+                    userId,
+                    role: "viewer",
+                });
+            }
         }
 
         return {

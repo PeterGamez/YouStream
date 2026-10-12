@@ -99,37 +99,59 @@ export default class RoomReconciliationService {
         return null;
     }
 
+    private static inFlightReconciliations = new Map<number, Promise<boolean>>();
+
+    public static async cancelRollback(roomId: number): Promise<void> {
+        this.pendingJobs.delete(roomId);
+
+        if (this.Redis) {
+            try {
+                await this.Redis.del(`${this.REDIS_PREFIX}${roomId}`);
+                await this.Redis.srem(this.REDIS_SET, String(roomId));
+            } catch (err) {
+                this.server?.warn("Reconciliation", `Failed to remove rollback job for room ${roomId} from Redis: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        }
+
+        if (this.pendingJobs.size === 0) {
+            this.stopWorker();
+        }
+    }
+
     public static async reconcileRoom(roomId: number): Promise<boolean> {
-        const job = await this.getPendingRollback(roomId);
-        if (!job) return true;
+        const existing = this.inFlightReconciliations.get(roomId);
+        if (existing) {
+            return await existing;
+        }
 
+        const task = (async (): Promise<boolean> => {
+            const job = await this.getPendingRollback(roomId);
+            if (!job) return true;
+
+            try {
+                await RoomModel.updateRoomFields(roomId, {
+                    mediaType: job.targetMediaType,
+                    currentMediaId: job.targetMediaId,
+                });
+
+                await this.cancelRollback(roomId);
+
+                this.server?.log("Reconciliation", `Successfully reconciled room ${roomId} media to mediaType=${job.targetMediaType}, currentMediaId=${job.targetMediaId}`);
+
+                return true;
+            } catch (error) {
+                job.attempts++;
+                job.lastError = error instanceof Error ? error.message : String(error);
+                this.server?.warn("Reconciliation", `Failed attempt ${job.attempts} to reconcile room ${roomId}: ${job.lastError}`);
+                return false;
+            }
+        })();
+
+        this.inFlightReconciliations.set(roomId, task);
         try {
-            await RoomModel.updateRoomFields(roomId, {
-                mediaType: job.targetMediaType,
-                currentMediaId: job.targetMediaId,
-            });
-
-            this.pendingJobs.delete(roomId);
-            if (this.Redis) {
-                try {
-                    await this.Redis.del(`${this.REDIS_PREFIX}${roomId}`);
-                    await this.Redis.srem(this.REDIS_SET, String(roomId));
-                } catch {
-                    // ignore redis error on delete
-                }
-            }
-
-            this.server?.log("Reconciliation", `Successfully reconciled room ${roomId} media to mediaType=${job.targetMediaType}, currentMediaId=${job.targetMediaId}`);
-
-            if (this.pendingJobs.size === 0) {
-                this.stopWorker();
-            }
-            return true;
-        } catch (error) {
-            job.attempts++;
-            job.lastError = error instanceof Error ? error.message : String(error);
-            this.server?.warn("Reconciliation", `Failed attempt ${job.attempts} to reconcile room ${roomId}: ${job.lastError}`);
-            return false;
+            return await task;
+        } finally {
+            this.inFlightReconciliations.delete(roomId);
         }
     }
 

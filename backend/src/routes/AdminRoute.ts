@@ -118,7 +118,16 @@ export default class AdminRoute implements RouteInterface {
 
                 await UserModel.updateUser(id, "role", role);
                 await UserService.delUser(id);
-                await SocketService.revokeUserSockets(id, "User role was changed by administrator");
+
+                try {
+                    await SocketService.revokeUserSockets(id, "User role was changed by administrator");
+                } catch (revokeErr) {
+                    const revokeMsg = revokeErr instanceof Error ? revokeErr.message : String(revokeErr);
+                    this.server.error("Admin Route", `Failed to revoke sockets for user ${id}: ${revokeMsg}`);
+                    await UserModel.updateUser(id, "role", user.role).catch(() => {});
+                    await UserService.delUser(id).catch(() => {});
+                    return c.json({ error: `Failed to revoke active user socket sessions: ${revokeMsg}` }, 500);
+                }
 
                 this.server.log("Admin Route", `Updated role for user ${id} to ${role}`);
 
@@ -187,7 +196,14 @@ export default class AdminRoute implements RouteInterface {
 
                 await UserModel.deleteUser(id);
                 await UserService.delUser(id);
-                await SocketService.revokeUserSockets(id, "User account was suspended by administrator");
+
+                try {
+                    await SocketService.revokeUserSockets(id, "User account was suspended by administrator");
+                } catch (revokeErr) {
+                    const revokeMsg = revokeErr instanceof Error ? revokeErr.message : String(revokeErr);
+                    this.server.error("Admin Route", `Failed to revoke sockets for deleted user ${id}: ${revokeMsg}`);
+                    return c.json({ error: `Failed to revoke active user socket sessions: ${revokeMsg}` }, 500);
+                }
 
                 this.server.log("Admin Route", `User ${id} suspended/deleted by admin`);
 

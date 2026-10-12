@@ -3,6 +3,7 @@ import type { Socket } from "socket.io";
 import { Server as IOServer } from "socket.io";
 
 import type Server from "../Server";
+import type { UserSafeDTO } from "../interfaces/Database";
 import type { SocketErrorPayload } from "../interfaces/Socket";
 import RoomModel from "../models/RoomModel";
 import ChatSocket from "../sockets/ChatSocket";
@@ -108,6 +109,7 @@ export default class SocketService {
             }
         } catch (error) {
             this.server?.error("SocketService", `Failed to revoke sockets for user ${userId}: ${error instanceof Error ? error.message : String(error)}`);
+            throw error;
         }
     }
 
@@ -162,7 +164,12 @@ export default class SocketService {
             }
         } catch (error) {
             this.server?.error("SocketService", `Failed to refresh sockets for user ${userId}: ${error instanceof Error ? error.message : String(error)}`);
+            throw error;
         }
+    }
+
+    public static async revalidateSocketUser(socket: Socket): Promise<UserSafeDTO | null> {
+        return await UserService.revalidateSocketUser(socket);
     }
 
     public static close(): void {

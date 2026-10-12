@@ -6,6 +6,7 @@ import type { RoomEndPayload, RoomJoinPayload, RoomLeavePayload, SocketErrorPayl
 import RoomModel from "../models/RoomModel";
 import RoomReconciliationService from "../services/RoomReconciliationService";
 import RoomStateService from "../services/RoomStateService";
+import UserService from "../services/UserService";
 
 export default class RoomSocket {
     private static io: IOServer;
@@ -57,7 +58,7 @@ export default class RoomSocket {
             }
 
             const session = await RoomStateService.getSocketSession(socket.id);
-            const userId = socket.data?.userId || socket.data?.user?.id || session?.userId;
+            let userId = socket.data?.userId || socket.data?.user?.id || session?.userId;
 
             if (!userId) {
                 const errorPayload: SocketErrorPayload = {
@@ -68,7 +69,22 @@ export default class RoomSocket {
                 return;
             }
 
-            const isAdmin = socket.data?.user?.role === "admin";
+            if (!socket.data?.userId) {
+                socket.data.userId = userId;
+            }
+
+            const freshUser = await UserService.revalidateSocketUser(socket);
+            if (!freshUser) {
+                const errorPayload: SocketErrorPayload = {
+                    code: "UNAUTHORIZED",
+                    message: "Authentication required or user session has expired",
+                };
+                socket.emit("error", errorPayload);
+                return;
+            }
+
+            userId = freshUser.id;
+            const isAdmin = freshUser.role === "admin";
             const isHost = room.hostId === userId || isAdmin;
 
             if (room.isPrivate && room.passcode && !isHost) {
@@ -124,7 +140,7 @@ export default class RoomSocket {
                 userId,
                 displayName: displayName || existingParticipant?.displayName || "",
                 avatarUrl: avatarUrl ?? existingParticipant?.avatarUrl,
-                role: existingParticipant?.role || role,
+                role,
                 socketId: socket.id,
                 joinedAt: existingParticipant?.joinedAt || new Date().toISOString(),
             });
@@ -239,6 +255,7 @@ export default class RoomSocket {
             const session = await RoomStateService.getSocketSession(socket.id);
             if (!userId && session?.userId) {
                 userId = session.userId;
+                socket.data.userId = userId;
             }
 
             if (!userId) {
@@ -249,6 +266,18 @@ export default class RoomSocket {
                 socket.emit("error", errorPayload);
                 return;
             }
+
+            const freshUser = await UserService.revalidateSocketUser(socket);
+            if (!freshUser) {
+                const errorPayload: SocketErrorPayload = {
+                    code: "UNAUTHORIZED",
+                    message: "Authentication required or user session has expired",
+                };
+                socket.emit("error", errorPayload);
+                return;
+            }
+
+            userId = freshUser.id;
 
             const roomKey = RoomStateService.getRoomKey(roomId);
 
@@ -272,7 +301,7 @@ export default class RoomSocket {
                 return;
             }
 
-            const isAdmin = socket.data?.user?.role === "admin";
+            const isAdmin = freshUser.role === "admin";
             const isHost = room.hostId === userId || isAdmin;
 
             if (!isHost) {
