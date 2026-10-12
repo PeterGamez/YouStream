@@ -43,9 +43,8 @@ export interface RoomRawInterface extends InterfaceBaseRaw {
     status: RoomStatus;
     media_type: RoomMediaType;
     current_media_id: number;
-    is_private: boolean | number;
+    is_private: boolean;
     passcode: string;
-    passcode_hash?: string;
     max_participants: number;
     ended_at: Date;
 }
