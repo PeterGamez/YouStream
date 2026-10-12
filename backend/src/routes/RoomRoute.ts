@@ -7,6 +7,7 @@ import type { RouteInterface } from "../interfaces/Route";
 import type { RoomType } from "../interfaces/Type";
 import RoomModel from "../models/RoomModel";
 import UserModel from "../models/UserModel";
+import RoomReconciliationService from "../services/RoomReconciliationService";
 import RoomStateService from "../services/RoomStateService";
 import RoomSocket from "../sockets/RoomSocket";
 
@@ -226,6 +227,11 @@ export default class RoomRoute implements RouteInterface {
                     // ignore
                 }
 
+                const effectiveMedia = await RoomReconciliationService.getEffectiveRoomMedia(room.id, {
+                    mediaType: room.mediaType,
+                    currentMediaId: room.currentMediaId,
+                });
+
                 const safeRoom: RoomSafeDTO & { host?: typeof host; participantCount: number } = {
                     id: room.id,
                     roomCode: room.roomCode,
@@ -234,8 +240,8 @@ export default class RoomRoute implements RouteInterface {
                     hostId: room.hostId,
                     host,
                     status: room.status,
-                    mediaType: room.mediaType,
-                    currentMediaId: room.currentMediaId,
+                    mediaType: effectiveMedia.mediaType,
+                    currentMediaId: effectiveMedia.currentMediaId,
                     isPrivate: room.isPrivate,
                     participantCount,
                     maxParticipants: room.maxParticipants,
@@ -285,6 +291,11 @@ export default class RoomRoute implements RouteInterface {
                     // ignore
                 }
 
+                const effectiveMedia = await RoomReconciliationService.getEffectiveRoomMedia(room.id, {
+                    mediaType: room.mediaType,
+                    currentMediaId: room.currentMediaId,
+                });
+
                 const safeRoom: RoomSafeDTO & { host?: typeof host; participantCount: number } = {
                     id: room.id,
                     roomCode: room.roomCode,
@@ -293,8 +304,8 @@ export default class RoomRoute implements RouteInterface {
                     hostId: room.hostId,
                     host,
                     status: room.status,
-                    mediaType: room.mediaType,
-                    currentMediaId: room.currentMediaId,
+                    mediaType: effectiveMedia.mediaType,
+                    currentMediaId: effectiveMedia.currentMediaId,
                     isPrivate: room.isPrivate,
                     participantCount,
                     maxParticipants: room.maxParticipants,

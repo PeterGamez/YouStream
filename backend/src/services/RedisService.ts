@@ -1,5 +1,6 @@
 import type Redis from "ioredis";
 
+import RoomReconciliationService from "./RoomReconciliationService";
 import RoomStateService from "./RoomStateService";
 
 export default class RedisService {
@@ -9,6 +10,7 @@ export default class RedisService {
         this.Redis = Redis;
 
         RoomStateService.init(Redis);
+        RoomReconciliationService.setRedis(Redis);
     }
 
     public static async get(key: string): Promise<string> {

@@ -4,6 +4,7 @@ import type Server from "../Server";
 import type { RedisParticipantRole } from "../interfaces/Redis";
 import type { RoomEndPayload, RoomJoinPayload, RoomLeavePayload, SocketErrorPayload } from "../interfaces/Socket";
 import RoomModel from "../models/RoomModel";
+import RoomReconciliationService from "../services/RoomReconciliationService";
 import RoomStateService from "../services/RoomStateService";
 
 export default class RoomSocket {
@@ -133,6 +134,13 @@ export default class RoomSocket {
             const recentMessages = await RoomStateService.getMessages(roomId, 100);
             const participants = await RoomStateService.getParticipants(roomId);
             const playbackState = await RoomStateService.getPlaybackState(roomId);
+
+            const effectiveMedia = await RoomReconciliationService.getEffectiveRoomMedia(roomId, {
+                mediaType: room.mediaType,
+                currentMediaId: room.currentMediaId,
+            });
+            room.mediaType = effectiveMedia.mediaType;
+            room.currentMediaId = effectiveMedia.currentMediaId;
 
             socket.emit("room:joined", {
                 roomInfo: {

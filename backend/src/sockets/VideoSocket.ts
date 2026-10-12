@@ -7,6 +7,7 @@ import type { MediaInterface } from "../interfaces/Database";
 import type { SocketErrorPayload, VideoChangePayload, VideoControlPayload } from "../interfaces/Socket";
 import MediaModel from "../models/MediaModel";
 import RoomModel from "../models/RoomModel";
+import RoomReconciliationService from "../services/RoomReconciliationService";
 import RoomStateService from "../services/RoomStateService";
 
 export default class VideoSocket {
@@ -16,6 +17,7 @@ export default class VideoSocket {
     public static init(io: IOServer, server: Server): void {
         this.io = io;
         this.server = server;
+        RoomReconciliationService.init(server, server.Redis);
     }
 
     public static register(socket: Socket): void {
@@ -38,6 +40,8 @@ export default class VideoSocket {
                 socket.emit("error", errorPayload);
                 return;
             }
+
+            await RoomReconciliationService.reconcileRoom(roomId);
 
             if (data?.sourceType !== "youtube" && data?.sourceType !== "local_file") {
                 const errorPayload: SocketErrorPayload = {
@@ -156,14 +160,37 @@ export default class VideoSocket {
                 const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
                 this.server.error("Socket:Video", `Failed to update playback state in Redis for room ${roomId}: ${redisMsg}`);
 
-                try {
-                    await RoomModel.updateRoomFields(roomId, {
-                        mediaType: previousMediaType,
-                        currentMediaId: previousMediaId,
+                let rollbackSuccess = false;
+                const maxRollbackAttempts = 3;
+                let lastRollbackError: Error | null = null;
+
+                for (let attempt = 1; attempt <= maxRollbackAttempts; attempt++) {
+                    try {
+                        await RoomModel.updateRoomFields(roomId, {
+                            mediaType: previousMediaType,
+                            currentMediaId: previousMediaId,
+                        });
+                        rollbackSuccess = true;
+                        break;
+                    } catch (err) {
+                        lastRollbackError = err instanceof Error ? err : new Error(String(err));
+                        this.server.warn("Socket:Video", `Rollback attempt ${attempt}/${maxRollbackAttempts} failed for room ${roomId}: ${lastRollbackError.message}`);
+                        if (attempt < maxRollbackAttempts) {
+                            await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+                        }
+                    }
+                }
+
+                if (!rollbackSuccess) {
+                    this.server.error("Socket:Video", `Immediate rollback failed for room ${roomId}. Enqueuing durable reconciliation job.`);
+                    await RoomReconciliationService.queueRollback({
+                        roomId,
+                        targetMediaType: previousMediaType,
+                        targetMediaId: previousMediaId,
+                        failedAt: new Date().toISOString(),
+                        attempts: maxRollbackAttempts,
+                        lastError: lastRollbackError?.message || "Immediate rollback failed",
                     });
-                } catch (rollbackErr) {
-                    const rollbackMsg = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
-                    this.server.error("Socket:Video", `Failed to rollback room ${roomId} media in DB: ${rollbackMsg}`);
                 }
 
                 socket.emit("error", {
@@ -202,6 +229,7 @@ export default class VideoSocket {
             }
 
             const { roomKey, userId, roomId } = authCheck;
+            await RoomReconciliationService.reconcileRoom(roomId);
             this.server.log("Socket:Video", `Video control in ${roomKey} by host ${userId}: ${data.action} at ${data.currentTime}s`);
 
             const isPlaying = data.action === "play" ? true : data.action === "pause" ? false : undefined;
