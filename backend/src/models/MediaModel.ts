@@ -12,7 +12,7 @@ export default class MediaModel {
         this.DB = DB;
     }
 
-    private static mapRowToMedia(row: MediaRawInterface): MediaInterface | null {
+    private static mapRowToMedia(row: MediaRawInterface): MediaInterface  {
         if (!row) return null;
         return {
             id: row.id,
