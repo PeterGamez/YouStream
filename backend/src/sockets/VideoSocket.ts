@@ -104,7 +104,6 @@ export default class VideoSocket {
     }
 
     private static async validateHost(socket: Socket, roomId: number | string): Promise<{ success: boolean; userId?: number; error?: SocketErrorPayload }> {
-        // 1. Enforce socket identity (Authentication)
         let userId: number = socket.data?.userId || socket.data?.user?.id;
         const session = await RoomStateService.getSocketSession(socket.id);
         if (!userId && session?.userId) {
@@ -123,7 +122,6 @@ export default class VideoSocket {
 
         const roomKey = `room:${roomId}`;
 
-        // 2. Enforce room-membership context
         const isInRoom = socket.rooms.has(roomKey) || (session && String(session.roomId) === String(roomId));
         if (!isInRoom) {
             return {
@@ -135,7 +133,6 @@ export default class VideoSocket {
             };
         }
 
-        // 3. Enforce host authorization
         if (socket.data?.user?.role === "admin") {
             return { success: true, userId };
         }
