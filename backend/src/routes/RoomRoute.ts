@@ -424,12 +424,27 @@ export default class RoomRoute implements RouteInterface {
                     const isPrivate = Boolean(body.isPrivate);
                     fieldsToUpdate.isPrivate = isPrivate;
                     if (isPrivate) {
-                        if (body.passcode) {
-                            fieldsToUpdate.passcode = await this.server.Password.hash(body.passcode.trim());
+                        const passcode = body.passcode?.trim();
+                        if (passcode) {
+                            if (passcode.length < 4) {
+                                return c.json({ error: "Private rooms require a passcode of at least 4 characters" }, 400);
+                            }
+                            fieldsToUpdate.passcode = await this.server.Password.hash(passcode);
+                        } else if (!room.isPrivate || !room.passcode) {
+                            return c.json({ error: "Private rooms require a passcode of at least 4 characters" }, 400);
                         }
                     } else {
                         fieldsToUpdate.passcode = null;
                     }
+                } else if (body.passcode !== undefined) {
+                    if (!room.isPrivate) {
+                        return c.json({ error: "Cannot set a passcode for a public room" }, 400);
+                    }
+                    const passcode = body.passcode?.trim();
+                    if (!passcode || passcode.length < 4) {
+                        return c.json({ error: "Private rooms require a passcode of at least 4 characters" }, 400);
+                    }
+                    fieldsToUpdate.passcode = await this.server.Password.hash(passcode);
                 }
 
                 if (Object.keys(fieldsToUpdate).length > 0) {
