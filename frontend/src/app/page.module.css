@@ -3,7 +3,7 @@
   --panel: #171715;
   --muted: #99968f;
   --line: rgba(244, 241, 231, 0.13);
-  --lime: #d3ef73;
+  --lime: #9b6bff;
   min-height: 100vh;
   overflow: hidden;
   color: #f4f1e9;
@@ -75,7 +75,7 @@
   gap: 9px;
   min-height: 42px;
   padding: 0 16px;
-  border: 1px solid rgba(211, 239, 115, 0.55);
+  border: 1px solid rgba(155, 107, 255, 0.55);
   border-radius: 4px;
   color: var(--lime);
   background: transparent;
@@ -109,7 +109,7 @@
   position: absolute;
   z-index: -2;
   inset: 0 0 0 34%;
-  background-image: url("https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=2000&q=90");
+  background-image: url("/images/hero-cinema.jpg");
   background-position: center 47%;
   background-size: cover;
   opacity: 0.78;
@@ -149,7 +149,7 @@
   height: 7px;
   border-radius: 50%;
   background: var(--lime);
-  box-shadow: 0 0 12px rgba(211, 239, 115, 0.44);
+  box-shadow: 0 0 12px rgba(155, 107, 255, 0.5);
 }
 
 .hero h1 {
@@ -203,7 +203,7 @@
 
 .primaryButton:hover {
   transform: translateY(-2px);
-  background: #e1f99a;
+  background: #b797ff;
 }
 
 .textButton {
@@ -291,7 +291,7 @@
 }
 
 .searchBox:focus-within {
-  border-color: rgba(211, 239, 115, 0.72);
+  border-color: rgba(155, 107, 255, 0.78);
 }
 
 .searchIcon {
@@ -602,7 +602,7 @@
 }
 
 .aboutSection button:hover {
-  color: #f0ffbb;
+  color: #d8c7ff;
 }
 
 .footer {
@@ -637,7 +637,7 @@
   gap: 18px;
   width: min(420px, calc(100vw - 32px));
   padding: 15px 17px;
-  border: 1px solid rgba(211, 239, 115, 0.42);
+  border: 1px solid rgba(155, 107, 255, 0.48);
   border-radius: 4px;
   color: #f4f1e9;
   background: #20201c;

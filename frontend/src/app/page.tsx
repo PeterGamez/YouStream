@@ -20,8 +20,7 @@ const initialRooms: Room[] = [
     host: "Mina",
     category: "Film",
     viewers: 8,
-    poster:
-      "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1000&q=85",
+    poster: "/images/room-film.jpg",
     code: "MOVIE042",
   },
   {
@@ -30,8 +29,7 @@ const initialRooms: Room[] = [
     host: "Jordan",
     category: "Music",
     viewers: 5,
-    poster:
-      "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1000&q=85",
+    poster: "/images/room-music.jpg",
     code: "MUSIC108",
   },
   {
@@ -40,8 +38,7 @@ const initialRooms: Room[] = [
     host: "Sam",
     category: "Series",
     viewers: 12,
-    poster:
-      "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=1000&q=85",
+    poster: "/images/room-series.jpg",
     code: "SERIES221",
   },
 ];
@@ -78,8 +75,7 @@ export default function Home() {
       host: "You",
       category: "Film",
       viewers: 1,
-      poster:
-        "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1000&q=85",
+      poster: "/images/room-custom.jpg",
       code: Math.random().toString(36).slice(2, 10).toUpperCase(),
     };
 
