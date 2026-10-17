@@ -1,69 +1,369 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import SiteHeader from "../components/SiteHeader";
+import { ApiError, apiRequest, clearTokens, hasSession } from "../lib/api";
+import {
+  createRoom as createRoomRequest,
+  listActiveRooms,
+  type Room,
+  type RoomMediaType,
+} from "../features/rooms/api";
 import styles from "./page.module.css";
 
+const categories = [
+  { id: "all", label: "All rooms" },
+  { id: "youtube", label: "YouTube" },
+  { id: "local_file", label: "Uploaded" },
+  { id: "none", label: "No video yet" },
+] as const;
+
+type RoomFilter = (typeof categories)[number]["id"];
+const roomPosters: Record<RoomMediaType, string> = {
+  none: "/images/room-custom.jpg",
+  youtube: "/images/room-series.jpg",
+  local_file: "/images/room-film.jpg",
+};
+
+const mediaLabels: Record<RoomMediaType, string> = {
+  none: "No video yet",
+  youtube: "YouTube",
+  local_file: "Uploaded video",
+};
+
 export default function Home() {
+  const router = useRouter();
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [roomStatus, setRoomStatus] = useState<
+    "loading" | "signed-out" | "error" | "ready"
+  >("loading");
+  const [roomError, setRoomError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [activeCategory, setActiveCategory] = useState<RoomFilter>("all");
+  const [search, setSearch] = useState("");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [roomTitle, setRoomTitle] = useState("");
+  const [createError, setCreateError] = useState("");
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadRooms() {
+      if (!hasSession()) {
+        setRoomStatus("signed-out");
+        return;
+      }
+
+      setRoomStatus("loading");
+      setRoomError("");
+      try {
+        const activeRooms = await listActiveRooms();
+        if (!isCurrent) return;
+        setRooms(activeRooms);
+        setRoomStatus("ready");
+      } catch (error) {
+        if (!isCurrent) return;
+        if (error instanceof ApiError && error.status === 401) {
+          clearTokens();
+          setRoomStatus("signed-out");
+        } else {
+          setRoomError(
+            error instanceof Error ? error.message : "Could not load rooms.",
+          );
+          setRoomStatus("error");
+        }
+      }
+    }
+
+    void loadRooms();
+    return () => {
+      isCurrent = false;
+    };
+  }, [reloadKey]);
+
+  const filteredRooms = rooms.filter((room) => {
+    const matchesCategory =
+      activeCategory === "all" || room.mediaType === activeCategory;
+    const matchesSearch = `${room.title} ${room.host?.displayName ?? ""} ${room.roomCode}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase());
+
+    return matchesCategory && matchesSearch;
+  });
+
+  function openCreateRoom() {
+    if (!hasSession()) {
+      router.push("/login");
+      return;
+    }
+    setCreateError("");
+    setIsCreateOpen(true);
+  }
+
+  async function createRoom(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const title = roomTitle.trim();
+    if (!title) return;
+
+    setIsSubmitting(true);
+    setCreateError("");
+    try {
+      const room = await createRoomRequest(title);
+      setIsCreateOpen(false);
+      setRoomTitle("");
+      router.push(`/room/${room.id}`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        clearTokens();
+        router.push("/login");
+        return;
+      }
+      setCreateError(
+        error instanceof Error ? error.message : "Could not create the room.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
+      <SiteHeader activePage="discover" onCreateRoom={openCreateRoom} />
+
+      <main id="top">
+        <section className={styles.hero} aria-labelledby="hero-title">
+          <div className={styles.heroImage} aria-hidden="true" />
+          <div className={styles.heroContent}>
+            <p className={styles.eyebrow}>
+              <span className={styles.liveDot} /> GOOD THINGS ARE BETTER TOGETHER
+            </p>
+            <h1 id="hero-title">
+              Run videos
+              <br />
+              in sync with friends
+              <br />
+              <span>Share a moment.</span>
+            </h1>
+            <p className={styles.heroDescription}>
+              Press play together.
+            </p>
+            <div className={styles.heroActions}>
+              <button
+                className={styles.primaryButton}
+                onClick={openCreateRoom}
+                type="button"
+              >
+                Start a room <span aria-hidden="true">&rarr;</span>
+              </button>
+              <a className={styles.textButton} href="#rooms">
+                Browse rooms <span aria-hidden="true">&darr;</span>
+              </a>
+            </div>
+          </div>
+          <div className={styles.heroCaption}>
+            <span className={styles.captionLine} />
+            <span>The living room</span>
+          </div>
+          <div className={styles.heroIndex} aria-hidden="true">
+            01 <span>/</span> 03
+          </div>
+        </section>
+
+        <section className={styles.roomsSection} id="rooms">
+          <div className={styles.sectionHeading}>
+            <div>
+              <p className={styles.sectionEyebrow}>THE COMMUNITY LOUNGE</p>
+              <h2>Find your next watch party</h2>
+            </div>
+            <label className={styles.searchBox}>
+              <span className={styles.searchIcon} aria-hidden="true" />
+              <span className={styles.srOnly}>Search rooms</span>
+              <input
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search rooms or hosts"
+                type="search"
+                value={search}
+              />
+              <span className={styles.searchShortcut}>/</span>
+            </label>
+          </div>
+
+          <div className={styles.roomToolbar}>
+            <div className={styles.categoryTabs} aria-label="Filter rooms">
+              {categories.map((category) => (
+                <button
+                  aria-pressed={activeCategory === category.id}
+                  className={
+                    activeCategory === category.id ? styles.categoryActive : ""
+                  }
+                  key={category.id}
+                  onClick={() => setActiveCategory(category.id)}
+                  type="button"
+                >
+                  {category.label}
+                </button>
+              ))}
+            </div>
+            <span className={styles.roomCount}>
+              <span className={styles.liveDot} /> {filteredRooms.length} active rooms
+            </span>
+          </div>
+
+          {roomStatus === "loading" ? (
+            <div className={styles.emptyState} aria-live="polite">
+              <p>Loading active rooms...</p>
+            </div>
+          ) : roomStatus === "signed-out" ? (
+            <div className={styles.emptyState}>
+              <p>Sign in to browse active rooms and start a watch party.</p>
+              <Link className={styles.emptyLink} href="/login">
+                Sign in or create account <span aria-hidden="true">&rarr;</span>
+              </Link>
+            </div>
+          ) : roomStatus === "error" ? (
+            <div className={styles.emptyState} role="alert">
+              <p>{roomError || "Could not load active rooms."}</p>
+              <button onClick={() => setReloadKey((key) => key + 1)} type="button">
+                Try again
+              </button>
+            </div>
+          ) : filteredRooms.length > 0 ? (
+            <div className={styles.roomGrid}>
+              {filteredRooms.map((room, index) => (
+                <article className={styles.roomCard} key={room.id}>
+                  <div
+                    className={styles.roomPoster}
+                    style={{ backgroundImage: `url("${roomPosters[room.mediaType]}")` }}
+                  >
+                    <span className={styles.roomCategory}>
+                      {mediaLabels[room.mediaType]}
+                    </span>
+                    <span className={styles.viewerCount}>
+                      <span className={styles.viewerIcon} aria-hidden="true" />
+                      {room.participantCount ?? 0} watching
+                    </span>
+                    <span className={styles.posterIndex}>0{index + 1}</span>
+                  </div>
+                  <div className={styles.roomDetails}>
+                    <div>
+                      <h3>{room.title}</h3>
+                      <p>
+                        Hosted by {room.host?.displayName ?? "YouStream member"}
+                        {room.isPrivate ? " · Private" : ""}
+                      </p>
+                    </div>
+                    <Link
+                      aria-label={`Join ${room.title}`}
+                      className={styles.joinButton}
+                      href={`/room/${room.id}`}
+                    >
+                      <span aria-hidden="true">&rarr;</span>
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : search.trim() ? (
+            <div className={styles.emptyState}>
+              <p>No rooms match that search.</p>
+              <button onClick={() => setSearch("")} type="button">
+                Clear search
+              </button>
+            </div>
+          ) : (
+            <div className={styles.emptyState}>
+              <span className={styles.emptyMark} aria-hidden="true">+</span>
+              <p>No one is watching together right now.</p>
+              <button onClick={openCreateRoom} type="button">
+                Start the first room
+              </button>
+            </div>
+          )}
+        </section>
+
+        <section className={styles.aboutSection} id="about">
+          <span className={styles.aboutNumber}>A BETTER WAY TO PRESS PLAY</span>
           <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
+            The best part isn&apos;t just what you&apos;re watching. It&apos;s who
+            you&apos;re watching with.
           </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+          <button onClick={openCreateRoom} type="button">
+            Make it a moment <span aria-hidden="true">&rarr;</span>
+          </button>
+        </section>
       </main>
+
+      <footer className={styles.footer}>
+        <a className={styles.brand} href="#top">
+          <span className={styles.brandMark}>y</span>
+          <span>YouStream</span>
+        </a>
+        <span>Watch close, even from far away.</span>
+        <span className={styles.footerYear}>2026</span>
+      </footer>
+
+      {isCreateOpen && (
+        <div
+          className={styles.modalBackdrop}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsCreateOpen(false);
+          }}
+        >
+          <section
+            aria-labelledby="create-title"
+            aria-modal="true"
+            className={styles.modal}
+            role="dialog"
+          >
+            <button
+              aria-label="Close dialog"
+              className={styles.modalClose}
+              onClick={() => setIsCreateOpen(false)}
+              type="button"
+            >
+              &times;
+            </button>
+            <p className={styles.sectionEyebrow}>MAKE A LITTLE SPACE</p>
+            <h2 id="create-title">Start a room</h2>
+            <p className={styles.modalDescription}>
+              Give your watch party a name. It will be saved to your account.
+            </p>
+            <form onSubmit={createRoom}>
+              <label className={styles.fieldLabel} htmlFor="room-title">
+                Room name
+              </label>
+              <input
+                autoFocus
+                className={styles.roomTitleInput}
+                id="room-title"
+                maxLength={80}
+                onChange={(event) => setRoomTitle(event.target.value)}
+                placeholder="Friday night films"
+                required
+                value={roomTitle}
+              />
+              {createError && <p className={styles.formError} role="alert">{createError}</p>}
+              <div className={styles.modalActions}>
+                <button
+                  className={styles.cancelButton}
+                  onClick={() => setIsCreateOpen(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button className={styles.primaryButton} disabled={isSubmitting} type="submit">
+                  {isSubmitting ? "Creating..." : "Create room"}
+                  {!isSubmitting && <span aria-hidden="true">&rarr;</span>}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

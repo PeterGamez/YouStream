@@ -1,0 +1,90 @@
+.page {
+  min-height: 100vh;
+  color: #f4f1e9;
+  background: #10100f;
+}
+
+.main {
+  width: min(100% - 48px, 900px);
+  min-height: calc(100vh - 86px);
+  margin: 0 auto;
+  padding: 70px 0 100px;
+}
+
+.eyebrow {
+  color: #b797ff;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 1.6px;
+}
+
+.main h1 {
+  margin-top: 12px;
+  font-size: 42px;
+  font-weight: 480;
+}
+
+.subtitle {
+  margin-top: 10px;
+  color: #a29e95;
+  font-size: 13px;
+}
+
+.emptyState {
+  display: flex;
+  min-height: 330px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 34px;
+  padding: 35px;
+  border-top: 1px solid rgba(244, 241, 233, 0.12);
+  border-bottom: 1px solid rgba(244, 241, 233, 0.12);
+  text-align: center;
+}
+
+.icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(155, 107, 255, 0.45);
+  border-radius: 50%;
+  color: #c7b0ff;
+  background: rgba(155, 107, 255, 0.1);
+  font-size: 17px;
+}
+
+.emptyState h2 {
+  margin-top: 18px;
+  font-size: 17px;
+  font-weight: 550;
+}
+
+.emptyState p {
+  max-width: 390px;
+  margin-top: 9px;
+  color: #99958d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.emptyState a {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 20px;
+  color: #c7b0ff;
+  font-size: 11px;
+}
+
+@media (max-width: 600px) {
+  .main {
+    width: calc(100% - 36px);
+    padding-top: 48px;
+  }
+
+  .main h1 {
+    font-size: 34px;
+  }
+}
