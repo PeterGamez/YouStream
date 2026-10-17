@@ -1,0 +1,228 @@
+.header {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100% - 96px, 1440px);
+  min-height: 86px;
+  margin: 0 auto;
+  color: #f4f1e9;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.brandMark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 10px;
+  color: #17121f;
+  background: #9b6bff;
+  font-family: Georgia, serif;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 27px;
+  color: #aaa79f;
+  font-size: 13px;
+}
+
+.nav a,
+.signInLink {
+  transition: color 160ms ease;
+}
+
+.nav a:hover,
+.nav .activeLink,
+.signInLink:hover {
+  color: #f4f1e9;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.signInLink {
+  color: #d5c5ff;
+  font-size: 12px;
+}
+
+.messagesButton,
+.createButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid rgba(155, 107, 255, 0.48);
+  border-radius: 4px;
+  color: #e6dcff;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.messagesButton:hover,
+.messagesButton[aria-expanded="true"] {
+  background: rgba(155, 107, 255, 0.13);
+}
+
+.messagesButton > span:first-child {
+  font-size: 17px;
+}
+
+.createButton {
+  border-color: #9b6bff;
+  color: #17121f;
+  background: #9b6bff;
+  font-weight: 650;
+}
+
+.createButton:hover {
+  background: #b797ff;
+}
+
+.createButton > span {
+  font-size: 18px;
+}
+
+.messagesPopup {
+  position: absolute;
+  top: 68px;
+  right: 0;
+  width: min(340px, calc(100vw - 32px));
+  padding: 17px;
+  border: 1px solid rgba(244, 241, 233, 0.14);
+  border-radius: 5px;
+  color: #f4f1e9;
+  background: #191916;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.52);
+  animation: popupIn 160ms ease-out both;
+}
+
+.popupHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.popupHeading h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.popupHeading p,
+.popupCopy {
+  color: #99958d;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.popupHeading p {
+  margin-top: 5px;
+}
+
+.popupHeading button {
+  border: 0;
+  color: #aaa79f;
+  background: transparent;
+  font: inherit;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.popupCopy {
+  margin-top: 19px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(244, 241, 233, 0.1);
+}
+
+.popupLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 15px;
+  color: #c7b0ff;
+  font-size: 11px;
+}
+
+@keyframes popupIn {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 760px) {
+  .header {
+    width: calc(100% - 36px);
+    min-height: 68px;
+  }
+
+  .brand {
+    gap: 8px;
+    font-size: 15px;
+  }
+
+  .brandMark {
+    width: 29px;
+    height: 29px;
+    border-radius: 9px;
+    font-size: 22px;
+  }
+
+  .nav {
+    display: none;
+  }
+
+  .actions {
+    gap: 7px;
+  }
+
+  .messagesButton,
+  .createButton {
+    min-height: 38px;
+    padding: 0 9px;
+    font-size: 10px;
+  }
+
+  .signInLink {
+    font-size: 10px;
+  }
+
+  .messagesPopup {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    width: min(340px, calc(100vw - 24px));
+  }
+}
+
+@media (max-width: 390px) {
+  .messagesLabel {
+    display: none;
+  }
+}

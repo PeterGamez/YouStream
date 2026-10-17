@@ -94,6 +94,21 @@
   line-height: 0.7;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.signInLink {
+  color: #d5c5ff;
+  font-size: 12px;
+}
+
+.signInLink:hover {
+  color: #fff;
+}
+
 .hero {
   position: relative;
   isolation: isolate;
@@ -567,6 +582,14 @@
   cursor: pointer;
 }
 
+.emptyLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #b797ff;
+  font-size: 12px;
+}
+
 .aboutSection {
   display: flex;
   align-items: center;
@@ -724,6 +747,13 @@
   border-color: var(--lime);
 }
 
+.formError {
+  margin-top: 10px;
+  color: #ff9b9b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .modalActions {
   display: flex;
   justify-content: end;
@@ -823,6 +853,14 @@
     min-height: 38px;
     padding: 0 11px;
     font-size: 11px;
+  }
+
+  .headerActions {
+    gap: 10px;
+  }
+
+  .signInLink {
+    font-size: 10px;
   }
 
   .hero {
