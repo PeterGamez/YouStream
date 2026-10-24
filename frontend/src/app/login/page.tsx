@@ -34,6 +34,13 @@ export default function LoginPage() {
           method: "POST",
           body: JSON.stringify({ username, email, password, displayName }),
         });
+
+        setMode("login");
+        setEmail("");
+        setDisplayName("");
+        setPassword("");
+        setIsSubmitting(false);
+        return;
       }
 
       const tokens = await apiRequest<LoginResponse>("/auth/login", {
@@ -87,7 +94,7 @@ export default function LoginPage() {
         </div>
 
         <form className={styles.form} onSubmit={submit}>
-          <label htmlFor="username">Username or email</label>
+          <label htmlFor="username">Username</label>
           <input
             autoComplete="username"
             id="username"

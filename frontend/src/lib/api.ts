@@ -1,5 +1,5 @@
 const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002"
 ).replace(/\/$/, "");
 
 const ACCESS_TOKEN_KEY = "youstream.accessToken";
@@ -45,11 +45,13 @@ export function hasSession() {
 
 async function parseError(response: Response) {
   let body: ApiErrorBody = {};
+
   try {
     body = (await response.json()) as ApiErrorBody;
   } catch {
     // Use the HTTP status text when the server does not return JSON.
   }
+
   return new ApiError(
     body.error || body.message || response.statusText || "Request failed",
     response.status,
@@ -58,15 +60,20 @@ async function parseError(response: Response) {
 
 async function send<T>(path: string, init: RequestInit, accessToken?: string) {
   const headers = new Headers(init.headers);
+
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers,
   });
+
   if (!response.ok) throw await parseError(response);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -81,6 +88,7 @@ async function refreshAccessToken() {
       method: "POST",
       body: JSON.stringify({ refreshToken }),
     });
+
     saveTokens(tokens);
     return tokens.accessToken;
   } catch {
@@ -91,6 +99,7 @@ async function refreshAccessToken() {
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}) {
   const accessToken = sessionStorage.getItem(ACCESS_TOKEN_KEY) || undefined;
+
   try {
     return await send<T>(path, init, accessToken);
   } catch (error) {
