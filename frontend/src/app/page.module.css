@@ -351,6 +351,8 @@
   border: 1px solid var(--line);
   border-radius: 3px;
   color: #858279;
+  background: transparent;
+  font: inherit;
   font-size: 11px;
 }
 
@@ -682,6 +684,19 @@
   font: inherit;
   font-size: 22px;
   cursor: pointer;
+}
+
+.notice button:disabled,
+.modalClose:disabled,
+.cancelButton:disabled,
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.page :where(a, button, input):focus-visible {
+  outline: 2px solid #c7b0ff;
+  outline-offset: 3px;
 }
 
 .modalBackdrop {

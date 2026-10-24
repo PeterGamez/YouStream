@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import SiteHeader from "../components/SiteHeader";
-import { ApiError, apiRequest, clearTokens, hasSession } from "../lib/api";
+import { ApiError, clearTokens, hasSession } from "../lib/api";
 import {
   createRoom as createRoomRequest,
   listActiveRooms,
@@ -47,6 +47,48 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [roomTitle, setRoomTitle] = useState("");
   const [createError, setCreateError] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    function handleSearchShortcut(event: KeyboardEvent) {
+      const target = event.target;
+      const isTypingTarget =
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
+      if (
+        event.key === "/" &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !isTypingTarget
+      ) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    }
+
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
+
+  useEffect(() => {
+    if (isCreateOpen) {
+      function handleDialogKeyDown(event: KeyboardEvent) {
+        if (event.key === "Escape" && !isSubmitting) {
+          setIsCreateOpen(false);
+        }
+      }
+
+      window.addEventListener("keydown", handleDialogKeyDown);
+      return () => window.removeEventListener("keydown", handleDialogKeyDown);
+    }
+
+    previousFocusRef.current?.focus();
+    previousFocusRef.current = null;
+  }, [isCreateOpen, isSubmitting]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -99,6 +141,10 @@ export default function Home() {
       router.push("/login");
       return;
     }
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     setCreateError("");
     setIsCreateOpen(true);
   }
@@ -183,12 +229,13 @@ export default function Home() {
               <span className={styles.searchIcon} aria-hidden="true" />
               <span className={styles.srOnly}>Search rooms</span>
               <input
+                ref={searchInputRef}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search rooms or hosts"
                 type="search"
                 value={search}
               />
-              <span className={styles.searchShortcut}>/</span>
+              <kbd className={styles.searchShortcut} aria-hidden="true">/</kbd>
             </label>
           </div>
 
@@ -208,9 +255,14 @@ export default function Home() {
                 </button>
               ))}
             </div>
-            <span className={styles.roomCount}>
-              <span className={styles.liveDot} /> {filteredRooms.length} active rooms
-            </span>
+            {roomStatus === "ready" && (
+              <span className={styles.roomCount} aria-live="polite">
+                <span className={styles.liveDot} />
+                {filteredRooms.length === rooms.length
+                  ? `${rooms.length} active ${rooms.length === 1 ? "room" : "rooms"}`
+                  : `${filteredRooms.length} of ${rooms.length} active rooms`}
+              </span>
+            )}
           </div>
 
           {roomStatus === "loading" ? (
@@ -310,10 +362,16 @@ export default function Home() {
         <div
           className={styles.modalBackdrop}
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setIsCreateOpen(false);
+            if (
+              !isSubmitting &&
+              event.target === event.currentTarget
+            ) {
+              setIsCreateOpen(false);
+            }
           }}
         >
           <section
+            aria-describedby="create-description"
             aria-labelledby="create-title"
             aria-modal="true"
             className={styles.modal}
@@ -322,6 +380,7 @@ export default function Home() {
             <button
               aria-label="Close dialog"
               className={styles.modalClose}
+              disabled={isSubmitting}
               onClick={() => setIsCreateOpen(false)}
               type="button"
             >
@@ -329,7 +388,7 @@ export default function Home() {
             </button>
             <p className={styles.sectionEyebrow}>MAKE A LITTLE SPACE</p>
             <h2 id="create-title">Start a room</h2>
-            <p className={styles.modalDescription}>
+            <p className={styles.modalDescription} id="create-description">
               Give your watch party a name. It will be saved to your account.
             </p>
             <form onSubmit={createRoom}>
@@ -350,6 +409,7 @@ export default function Home() {
               <div className={styles.modalActions}>
                 <button
                   className={styles.cancelButton}
+                  disabled={isSubmitting}
                   onClick={() => setIsCreateOpen(false)}
                   type="button"
                 >

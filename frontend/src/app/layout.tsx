@@ -12,10 +12,6 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
-const metadata2: Metadata = {
-  title: "YouStream | Watch together",
-  description: "Find your people and share a watch party on YouStream.",
-};
 export const metadata: Metadata = {
   title: "YouStream | Watch together",
   description: "Find your people and share a watch party on YouStream.",
@@ -28,5 +24,4 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     </html>
   );
 }
-
 
