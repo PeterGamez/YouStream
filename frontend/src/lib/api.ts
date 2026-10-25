@@ -1,4 +1,4 @@
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002").replace(/\/$/, "");
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
 
 const ACCESS_TOKEN_KEY = "youstream.accessToken";
 const REFRESH_TOKEN_KEY = "youstream.refreshToken";
