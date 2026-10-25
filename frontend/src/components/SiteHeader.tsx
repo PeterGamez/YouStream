@@ -12,11 +12,14 @@ type SiteHeaderProps = {
 
 type CurrentUser = {
   displayName: string;
+  avatarUrl?: string;
 };
 
 export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
   const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
   const [profileName, setProfileName] = useState("");
+  const [profileAvatar, setProfileAvatar] = useState("");
+  const [avatarError, setAvatarError] = useState(false);
 
   useEffect(() => {
     let isCurrent = true;
@@ -27,12 +30,18 @@ export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
 
       if (!signedIn) {
         setProfileName("");
+        setProfileAvatar("");
+        setAvatarError(false);
         return;
       }
 
       void apiRequest<CurrentUser>("/users/me")
         .then((user) => {
-          if (isCurrent) setProfileName(user.displayName);
+          if (isCurrent) {
+            setProfileName(user.displayName);
+            setProfileAvatar(user.avatarUrl || "");
+            setAvatarError(false);
+          }
         })
         .catch((error: unknown) => {
           if (!isCurrent) return;
@@ -41,6 +50,7 @@ export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
             return;
           }
           setProfileName("");
+          setProfileAvatar("");
         });
     };
 
@@ -73,7 +83,15 @@ export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
           {isSignedIn === true && (
             <Link aria-label="Edit profile" className={styles.profileLink} href="/profile">
               <span aria-hidden="true" className={styles.profileAvatar}>
-                {(profileName || "P").slice(0, 1).toUpperCase()}
+                {profileAvatar && !avatarError ? (
+                  <img
+                    alt=""
+                    onError={() => setAvatarError(true)}
+                    src={profileAvatar}
+                  />
+                ) : (
+                  (profileName || "P").slice(0, 1).toUpperCase()
+                )}
               </span>
               <span>{profileName || "Profile"}</span>
             </Link>

@@ -9,15 +9,20 @@ import { PROFILE_CHANGE_EVENT, apiRequest, clearTokens, getAccessToken, hasSessi
 import styles from "./page.module.css";
 
 type UserProfile = {
+  id?: number;
   username: string;
   email: string;
   displayName: string;
+  avatarUrl?: string;
+  role?: string;
 };
 
 export default function ProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarImgFailed, setAvatarImgFailed] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "saving">("loading");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -36,6 +41,8 @@ export default function ProfilePage() {
         if (!isCurrent) return;
         setProfile(user);
         setDisplayName(user.displayName);
+        setAvatarUrl(user.avatarUrl || "");
+        setAvatarImgFailed(false);
         setStatus("ready");
       } catch (loadError) {
         if (!isCurrent) return;
@@ -57,6 +64,8 @@ export default function ProfilePage() {
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedName = displayName.trim();
+    const trimmedAvatar = avatarUrl.trim();
+
     if (!trimmedName) {
       setError("Please enter a display name.");
       return;
@@ -68,9 +77,20 @@ export default function ProfilePage() {
     try {
       await apiRequest("/users/me", {
         method: "PATCH",
-        body: JSON.stringify({ displayName: trimmedName }),
+        body: JSON.stringify({
+          displayName: trimmedName,
+          avatarUrl: trimmedAvatar || undefined,
+        }),
       });
-      setProfile((current) => (current ? { ...current, displayName: trimmedName } : current));
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              displayName: trimmedName,
+              avatarUrl: trimmedAvatar || current.avatarUrl,
+            }
+          : current
+      );
       setDisplayName(trimmedName);
       setNotice("Your changes have been saved.");
       window.dispatchEvent(new Event(PROFILE_CHANGE_EVENT));
@@ -86,6 +106,12 @@ export default function ProfilePage() {
     router.replace("/login");
   }
 
+  const activeAvatarSrc = avatarUrl.trim() || profile?.avatarUrl;
+  const isUnchanged =
+    profile !== null &&
+    displayName.trim() === profile.displayName &&
+    avatarUrl.trim() === (profile.avatarUrl || "").trim();
+
   return (
     <div className={styles.page}>
       <SiteHeader />
@@ -96,7 +122,7 @@ export default function ProfilePage() {
         <section className={styles.panel}>
           <p className={styles.eyebrow}>YOUR PROFILE</p>
           <h1>Your profile</h1>
-          <p className={styles.subtitle}>Choose the name people see when you watch together.</p>
+          <p className={styles.subtitle}>Choose the name and picture people see when you watch together.</p>
 
           {status === "loading" ? (
             <p className={styles.state} aria-live="polite">
@@ -105,18 +131,53 @@ export default function ProfilePage() {
           ) : profile ? (
             <>
               <div className={styles.accountDetails}>
-                <div className={styles.avatar} aria-hidden="true">
-                  {(profile.displayName || "?").slice(0, 1).toUpperCase()}
+                <div className={styles.avatarWrapper}>
+                  {activeAvatarSrc && !avatarImgFailed ? (
+                    <img
+                      alt={displayName || profile.displayName}
+                      className={styles.avatarImage}
+                      onError={() => setAvatarImgFailed(true)}
+                      src={activeAvatarSrc}
+                    />
+                  ) : (
+                    <div className={styles.avatarFallback} aria-hidden="true">
+                      {(displayName || profile.displayName || "?").slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <strong>{profile.displayName}</strong>
+                  <strong>{displayName || profile.displayName}</strong>
                   <span>@{profile.username}</span>
                 </div>
               </div>
 
               <form className={styles.form} onSubmit={saveProfile}>
                 <label htmlFor="profile-display-name">Display name</label>
-                <input autoComplete="name" id="profile-display-name" maxLength={100} onChange={(event) => setDisplayName(event.target.value)} required value={displayName} />
+                <input
+                  autoComplete="name"
+                  id="profile-display-name"
+                  maxLength={100}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  required
+                  value={displayName}
+                />
+
+                <label htmlFor="profile-avatar-url">Profile picture URL (Avatar)</label>
+                <input
+                  autoComplete="url"
+                  id="profile-avatar-url"
+                  maxLength={500}
+                  onChange={(event) => {
+                    setAvatarUrl(event.target.value);
+                    setAvatarImgFailed(false);
+                  }}
+                  placeholder="https://example.com/your-avatar.jpg"
+                  type="url"
+                  value={avatarUrl}
+                />
+                <span className={styles.inputHelp}>
+                  Enter a direct image link (JPG, PNG, WebP) or leave empty for default Gravatar.
+                </span>
 
                 <label htmlFor="profile-email">Email address</label>
                 <input id="profile-email" readOnly value={profile.email} />
@@ -131,7 +192,7 @@ export default function ProfilePage() {
                     {notice}
                   </p>
                 )}
-                <button disabled={status === "saving" || displayName.trim() === profile.displayName} type="submit">
+                <button disabled={status === "saving" || isUnchanged} type="submit">
                   {status === "saving" ? "Saving..." : "Save changes"}
                 </button>
               </form>

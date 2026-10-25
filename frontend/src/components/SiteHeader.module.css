@@ -64,6 +64,14 @@
   background: #b797ff;
   font-size: 12px;
   font-weight: 700;
+  overflow: hidden;
+}
+
+.profileAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .actions {

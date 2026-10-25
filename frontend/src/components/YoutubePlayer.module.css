@@ -151,32 +151,6 @@
   background: #f59e0b;
 }
 
-/* Crop toggle button in bottom corner */
-.cropToggleButton {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  z-index: 10;
-  padding: 4px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 4px;
-  color: #aaa79f;
-  background: rgba(16, 16, 18, 0.72);
-  backdrop-filter: blur(6px);
-  font-family: inherit;
-  font-size: 10px;
-  font-weight: 500;
-  cursor: pointer;
-  opacity: 0.55;
-  transition: opacity 0.2s ease, background 0.2s ease, color 0.2s ease;
-}
-
-.cropToggleButton:hover {
-  opacity: 1;
-  background: rgba(28, 26, 32, 0.95);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.3);
-}
 
 @keyframes fadeIn {
   from {

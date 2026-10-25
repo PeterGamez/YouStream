@@ -116,7 +116,6 @@ export default function YoutubePlayer({
   const [isReady, setIsReady] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isPlayingState, setIsPlayingState] = useState(isPlaying);
-  const [isCleanView, setIsCleanView] = useState(true);
 
   useEffect(() => {
     onControlRef.current = onControl;
@@ -337,13 +336,7 @@ export default function YoutubePlayer({
   return (
     <div
       aria-label={isHost ? "YouTube video player" : "Shared YouTube video"}
-      className={`${styles.container} ${
-        isHost
-          ? styles.hostContainer
-          : isCleanView
-            ? styles.cleanViewerContainer
-            : styles.standardViewerContainer
-      }`}
+      className={`${styles.container} ${isHost ? styles.hostContainer : styles.cleanViewerContainer}`}
     >
       <div className={styles.playerWrapper} ref={wrapperRef} />
 
@@ -374,18 +367,6 @@ export default function YoutubePlayer({
               </div>
             </div>
           )}
-
-          <button
-            className={styles.cropToggleButton}
-            onClick={(event) => {
-              event.stopPropagation();
-              setIsCleanView((previous) => !previous);
-            }}
-            title={isCleanView ? "สลับเป็นมุมมองเต็ม (แสดงแถบ YouTube)" : "สลับเป็นโหมดคลีน (ซ่อนแถบ YouTube)"}
-            type="button"
-          >
-            {isCleanView ? "โหมดคลีน: เปิด" : "โหมดคลีน: ปิด"}
-          </button>
         </div>
       )}
     </div>
