@@ -220,6 +220,28 @@ export default class RoomSocket {
                         await RoomStateService.addParticipant(roomId, participant);
                     } else {
                         await RoomStateService.removeParticipant(roomId, userId);
+
+                        const room = await RoomModel.selectRoom(roomId);
+                        if (room && room.hostId === userId) {
+                            try {
+                                await RoomModel.deleteRoom(roomId);
+                            } catch (dbErr) {
+                                const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+                                this.server.error("Socket:Room", `Failed to delete room ${roomId} on host leave: ${dbMsg}`);
+                            }
+
+                            try {
+                                await RoomStateService.cleanupRoom(roomId);
+                            } catch (redisErr) {
+                                const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+                                this.server.warn("Socket:Room", `Redis cleanup error on host leave: ${redisMsg}`);
+                            }
+
+                            this.server.log("Socket:Room", `Host ${userId} left. Room ${roomId} deleted from database.`);
+                            RoomSocket.endRoom(roomId, "Room has been closed because the host left");
+                            return;
+                        }
+
                         this.io.to(roomKey).emit("room:user-left", {
                             userId: userId,
                             displayName: participant.displayName || socket.data?.user?.displayName || "",
@@ -314,13 +336,13 @@ export default class RoomSocket {
             }
 
             try {
-                await RoomModel.endRoom(roomId);
+                await RoomModel.deleteRoom(roomId);
             } catch (dbErr) {
                 const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
-                this.server.error("Socket:Room", `Failed to end room ${roomId} in database: ${dbMsg}`);
+                this.server.error("Socket:Room", `Failed to delete room ${roomId} in database: ${dbMsg}`);
                 socket.emit("error", {
                     code: "INTERNAL_ERROR",
-                    message: "Failed to terminate room in database",
+                    message: "Failed to delete room in database",
                 });
                 return;
             }
@@ -332,9 +354,9 @@ export default class RoomSocket {
                 this.server.warn("Socket:Room", `Redis cleanup error for room ${roomId}: ${redisMsg}`);
             }
 
-            this.server.log("Socket:Room", `Room ${roomId} ended by user ${userId}`);
+            this.server.log("Socket:Room", `Room ${roomId} deleted by user ${userId}`);
 
-            const reason = data.reason || (isAdmin && room.hostId !== userId ? "Room terminated by administrator" : "Room has been ended by the host");
+            const reason = data.reason || (isAdmin && room.hostId !== userId ? "Room terminated by administrator" : "Room has been closed by the host");
 
             this.endRoom(roomId, reason);
         });
@@ -355,6 +377,29 @@ export default class RoomSocket {
                         await RoomStateService.addParticipant(session.roomId, participant);
                     } else {
                         await RoomStateService.removeParticipant(session.roomId, session.userId);
+
+                        const room = await RoomModel.selectRoom(session.roomId);
+                        if (room && room.hostId === session.userId) {
+                            try {
+                                await RoomModel.deleteRoom(session.roomId);
+                            } catch (dbErr) {
+                                const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+                                this.server.error("Socket:Room", `Failed to delete room ${session.roomId} on host disconnect: ${dbMsg}`);
+                            }
+
+                            try {
+                                await RoomStateService.cleanupRoom(session.roomId);
+                            } catch (redisErr) {
+                                const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+                                this.server.warn("Socket:Room", `Redis cleanup error on host disconnect: ${redisMsg}`);
+                            }
+
+                            this.server.log("Socket:Room", `Host ${session.userId} disconnected. Room ${session.roomId} deleted from database.`);
+                            RoomSocket.endRoom(session.roomId, "Room has been closed because the host disconnected");
+                            await RoomStateService.delSocketSession(socket.id);
+                            return;
+                        }
+
                         this.io.to(roomKey).emit("room:user-left", {
                             userId: session.userId,
                             displayName: participant.displayName || socket.data?.user?.displayName || "",

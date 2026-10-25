@@ -47,10 +47,41 @@
 .accountDetails {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   margin-top: 25px;
   padding-bottom: 20px;
   border-bottom: 1px solid rgba(244, 241, 233, 0.1);
+}
+
+.avatarWrapper {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(183, 151, 255, 0.4);
+  background: #17121f;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.avatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatarFallback {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  border-radius: 50%;
+  color: #17121f;
+  background: #b797ff;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 .avatar {
@@ -73,7 +104,7 @@
 }
 
 .accountDetails strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -94,6 +125,13 @@
   font-size: 11px;
 }
 
+.inputHelp {
+  margin-top: 5px;
+  color: #88847c;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .form input {
   width: 100%;
   height: 42px;
@@ -105,6 +143,7 @@
   background: #10100f;
   font: inherit;
   font-size: 12px;
+  transition: border-color 0.15s ease;
 }
 
 .form input:focus {
@@ -128,6 +167,12 @@
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.form button:hover:not(:disabled) {
+  background: #ad83ff;
+  border-color: #ad83ff;
 }
 
 .form button:disabled {

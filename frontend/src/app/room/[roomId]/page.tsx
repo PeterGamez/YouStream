@@ -215,6 +215,12 @@ export default function RoomPage() {
           if (sync.action === "play") void video.play().catch(() => {});
           if (sync.action === "pause") video.pause();
         });
+        activeSocket.on("room:ended", (data: { roomId: number; reason?: string }) => {
+          setStatus("Room closed");
+          setError(data?.reason || "The host has left and closed this room.");
+          setPlayback(null);
+          setYoutubeSync(null);
+        });
         activeSocket.on("connect_error", () => {
           setError("Could not connect to the realtime server.");
           setStatus("Connection failed");
@@ -326,18 +332,47 @@ export default function RoomPage() {
     });
   }
 
+  function handleLeaveRoom() {
+    if (isHost) {
+      const confirmed = window.confirm("Are you sure you want to leave? As the host, leaving will close and delete this room.");
+      if (!confirmed) return;
+    }
+    if (socketRef.current?.connected) {
+      socketRef.current.emit("room:leave", { roomId: Number(params.roomId) });
+    }
+    router.push("/");
+  }
+
   const localVideoUrl = playback?.sourceUrl ? new URL(playback.sourceUrl, config.wsUrl).toString() : "";
 
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <Link className={styles.brand} href="/">
+        <Link
+          className={styles.brand}
+          href="/"
+          onClick={(event) => {
+            if (isHost && !window.confirm("Are you sure you want to leave? As the host, leaving will close and delete this room.")) {
+              event.preventDefault();
+            }
+          }}
+        >
           <span className={styles.brandMark}>y</span> YouStream
         </Link>
-        <Link className={styles.backLink} href="/">
-          &larr; Discover
-        </Link>
+        <button className={styles.leaveRoomLink} onClick={handleLeaveRoom} type="button">
+          &larr; {isHost ? "Close room & exit" : "Leave room"}
+        </button>
       </header>
+
+      {status === "Room closed" && (
+        <div className={styles.roomClosedNotice}>
+          <h2>Room Closed</h2>
+          <p>{error || "The host has left and closed this room."}</p>
+          <Link className={styles.returnLobbyButton} href="/">
+            &larr; Return to Discover
+          </Link>
+        </div>
+      )}
 
       <div className={styles.roomHeader}>
         <div>
@@ -385,6 +420,14 @@ export default function RoomPage() {
               </button>
               <button aria-pressed={mediaMode === "upload"} onClick={() => setMediaMode("upload")} type="button">
                 Upload
+              </button>
+              <button
+                className={styles.closeRoomButton}
+                onClick={handleLeaveRoom}
+                title="Leave and delete this room"
+                type="button"
+              >
+                Delete & Exit
               </button>
             </div>
           </div>
