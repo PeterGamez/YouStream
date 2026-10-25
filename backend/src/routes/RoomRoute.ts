@@ -495,7 +495,7 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Forbidden: Only the room host can end the room" }, 403);
                 }
 
-                await RoomModel.endRoom(id);
+                await RoomModel.deleteRoom(id);
 
                 try {
                     await RoomStateService.cleanupRoom(id);
@@ -505,16 +505,16 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 try {
-                    RoomSocket.endRoom(id, "Room has been ended by the host");
+                    RoomSocket.endRoom(id, "Room has been closed by the host");
                 } catch (socketErr) {
                     const socketMsg = socketErr instanceof Error ? socketErr.message : String(socketErr);
                     this.server.warn("Room Route", `Socket endRoom emit error: ${socketMsg}`);
                 }
 
-                this.server.log("Room Route", `Room ${id} ended by user ${user.id}`);
+                this.server.log("Room Route", `Room ${id} deleted by user ${user.id}`);
 
                 return c.json({
-                    message: "Room ended successfully",
+                    message: "Room deleted successfully",
                     roomId: id,
                     endedAt: new Date().toISOString(),
                 });
