@@ -430,6 +430,16 @@
   overflow-wrap: anywhere;
 }
 
+.systemMessage {
+  align-self: center;
+  max-width: 100%;
+  color: #99958d;
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .chatForm {
   display: flex;
   gap: 8px;

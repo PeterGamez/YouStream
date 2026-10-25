@@ -1,9 +1,9 @@
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002"
-).replace(/\/$/, "");
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3002").replace(/\/$/, "");
 
 const ACCESS_TOKEN_KEY = "youstream.accessToken";
 const REFRESH_TOKEN_KEY = "youstream.refreshToken";
+export const SESSION_CHANGE_EVENT = "youstream:session-changed";
+export const PROFILE_CHANGE_EVENT = "youstream:profile-changed";
 
 type AuthTokens = {
   accessToken: string;
@@ -26,17 +26,43 @@ export class ApiError extends Error {
 }
 
 export function saveTokens(tokens: AuthTokens) {
-  sessionStorage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
-  sessionStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+  const storage = isRememberedSession() ? localStorage : sessionStorage;
+  const otherStorage = storage === localStorage ? sessionStorage : localStorage;
+  storage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
+  storage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+  otherStorage.removeItem(ACCESS_TOKEN_KEY);
+  otherStorage.removeItem(REFRESH_TOKEN_KEY);
+  window.dispatchEvent(new Event(SESSION_CHANGE_EVENT));
+}
+
+export function saveLoginTokens(tokens: AuthTokens, rememberMe: boolean) {
+  const storage = rememberMe ? localStorage : sessionStorage;
+  const otherStorage = rememberMe ? sessionStorage : localStorage;
+  storage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
+  storage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
+  otherStorage.removeItem(ACCESS_TOKEN_KEY);
+  otherStorage.removeItem(REFRESH_TOKEN_KEY);
+  window.dispatchEvent(new Event(SESSION_CHANGE_EVENT));
 }
 
 export function clearTokens() {
   sessionStorage.removeItem(ACCESS_TOKEN_KEY);
   sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  window.dispatchEvent(new Event(SESSION_CHANGE_EVENT));
+}
+
+function getStoredToken(key: string) {
+  return localStorage.getItem(key) || sessionStorage.getItem(key);
+}
+
+function isRememberedSession() {
+  return Boolean(localStorage.getItem(REFRESH_TOKEN_KEY));
 }
 
 export function getAccessToken() {
-  return sessionStorage.getItem(ACCESS_TOKEN_KEY);
+  return getStoredToken(ACCESS_TOKEN_KEY);
 }
 
 export function hasSession() {
@@ -52,10 +78,7 @@ async function parseError(response: Response) {
     // Use the HTTP status text when the server does not return JSON.
   }
 
-  return new ApiError(
-    body.error || body.message || response.statusText || "Request failed",
-    response.status,
-  );
+  return new ApiError(body.error || body.message || response.statusText || "Request failed", response.status);
 }
 
 async function send<T>(path: string, init: RequestInit, accessToken?: string) {
@@ -80,7 +103,7 @@ async function send<T>(path: string, init: RequestInit, accessToken?: string) {
 }
 
 async function refreshAccessToken() {
-  const refreshToken = sessionStorage.getItem(REFRESH_TOKEN_KEY);
+  const refreshToken = getStoredToken(REFRESH_TOKEN_KEY);
   if (!refreshToken) return null;
 
   try {
@@ -98,7 +121,7 @@ async function refreshAccessToken() {
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}) {
-  const accessToken = sessionStorage.getItem(ACCESS_TOKEN_KEY) || undefined;
+  const accessToken = getAccessToken() || undefined;
 
   try {
     return await send<T>(path, init, accessToken);

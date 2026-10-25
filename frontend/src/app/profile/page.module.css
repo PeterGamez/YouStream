@@ -1,0 +1,185 @@
+.page {
+  min-height: 100vh;
+  padding: 0 max(24px, calc((100vw - 1440px) / 2));
+  color: #f4f1e9;
+  background: #10100f;
+}
+
+.main {
+  width: min(100%, 660px);
+  margin: 0 auto;
+  padding: 28px 0 60px;
+}
+
+.backLink {
+  color: #c7b0ff;
+  font-size: 12px;
+}
+
+.panel {
+  margin-top: 20px;
+  padding: 30px;
+  border: 1px solid rgba(244, 241, 233, 0.12);
+  border-radius: 5px;
+  background: #171715;
+}
+
+.eyebrow {
+  color: #b797ff;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 1.6px;
+}
+
+.panel h1 {
+  margin-top: 10px;
+  font-size: 26px;
+  font-weight: 520;
+}
+
+.subtitle {
+  margin-top: 8px;
+  color: #aaa79f;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.accountDetails {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 25px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(244, 241, 233, 0.1);
+}
+
+.avatar {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: #17121f;
+  background: #b797ff;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.accountDetails > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.accountDetails strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.accountDetails span {
+  color: #99958d;
+  font-size: 11px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  margin-top: 20px;
+}
+
+.form label {
+  margin: 13px 0 7px;
+  color: #d6d2ca;
+  font-size: 11px;
+}
+
+.form input {
+  width: 100%;
+  height: 42px;
+  padding: 0 11px;
+  border: 1px solid rgba(244, 241, 233, 0.14);
+  border-radius: 3px;
+  outline: 0;
+  color: #f4f1e9;
+  background: #10100f;
+  font: inherit;
+  font-size: 12px;
+}
+
+.form input:focus {
+  border-color: #9b6bff;
+}
+
+.form input:read-only {
+  color: #99958d;
+}
+
+.form button,
+.state button {
+  min-height: 42px;
+  margin-top: 22px;
+  padding: 0 14px;
+  border: 1px solid #9b6bff;
+  border-radius: 3px;
+  color: #1c1428;
+  background: #9b6bff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.form button:disabled {
+  color: #89848f;
+  background: #302d34;
+  border-color: #302d34;
+  cursor: not-allowed;
+}
+
+.error,
+.notice {
+  margin-top: 14px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.error {
+  color: #ff9b9b;
+}
+
+.notice {
+  color: #7edb9a;
+}
+
+.signOutButton {
+  margin-top: 22px;
+  padding: 7px 0;
+  border: 0;
+  color: #c7b0ff;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.signOutButton:hover {
+  color: #f4f1e9;
+}
+
+.state {
+  margin-top: 20px;
+  color: #aaa79f;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+  .page {
+    padding: 0 18px;
+  }
+
+  .panel {
+    padding: 24px 20px;
+  }
+}

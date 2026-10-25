@@ -112,6 +112,21 @@
   font-size: 12px;
 }
 
+.rememberMe {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--muted, #8e8e9a);
+  font-size: 0.9rem;
+}
+
+.rememberMe input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--accent, #e45461);
+}
+
 .form input:focus {
   border-color: #9b6bff;
 }

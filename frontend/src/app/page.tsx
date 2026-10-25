@@ -1,16 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+
 import SiteHeader from "../components/SiteHeader";
+import { type Room, type RoomMediaType, createRoom as createRoomRequest, listActiveRooms } from "../features/rooms/api";
 import { ApiError, clearTokens, hasSession } from "../lib/api";
-import {
-  createRoom as createRoomRequest,
-  listActiveRooms,
-  type Room,
-  type RoomMediaType,
-} from "../features/rooms/api";
 import styles from "./page.module.css";
 
 const categories = [
@@ -21,11 +17,16 @@ const categories = [
 ] as const;
 
 type RoomFilter = (typeof categories)[number]["id"];
-const roomPosters: Record<RoomMediaType, string> = {
-  none: "/images/room-custom.jpg",
-  youtube: "/images/room-series.jpg",
-  local_file: "/images/room-film.jpg",
+const roomPosters: Record<RoomMediaType, string[]> = {
+  none: ["/images/room-custom.jpg", "/images/room-music.jpg"],
+  youtube: ["/images/room-series.jpg", "/images/room-music.jpg"],
+  local_file: ["/images/room-film.jpg", "/images/room-series.jpg"],
 };
+
+function getRoomPoster(room: Room) {
+  const posters = roomPosters[room.mediaType];
+  return posters[room.id % posters.length];
+}
 
 const mediaLabels: Record<RoomMediaType, string> = {
   none: "No video yet",
@@ -36,9 +37,7 @@ const mediaLabels: Record<RoomMediaType, string> = {
 export default function Home() {
   const router = useRouter();
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [roomStatus, setRoomStatus] = useState<
-    "loading" | "signed-out" | "error" | "ready"
-  >("loading");
+  const [roomStatus, setRoomStatus] = useState<"loading" | "signed-out" | "error" | "ready">("loading");
   const [roomError, setRoomError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [activeCategory, setActiveCategory] = useState<RoomFilter>("all");
@@ -53,18 +52,9 @@ export default function Home() {
   useEffect(() => {
     function handleSearchShortcut(event: KeyboardEvent) {
       const target = event.target;
-      const isTypingTarget =
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+      const isTypingTarget = target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
-      if (
-        event.key === "/" &&
-        !event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !isTypingTarget
-      ) {
+      if (event.key === "/" && !event.altKey && !event.ctrlKey && !event.metaKey && !isTypingTarget) {
         event.preventDefault();
         searchInputRef.current?.focus();
       }
@@ -112,9 +102,7 @@ export default function Home() {
           clearTokens();
           setRoomStatus("signed-out");
         } else {
-          setRoomError(
-            error instanceof Error ? error.message : "Could not load rooms.",
-          );
+          setRoomError(error instanceof Error ? error.message : "Could not load rooms.");
           setRoomStatus("error");
         }
       }
@@ -127,11 +115,8 @@ export default function Home() {
   }, [reloadKey]);
 
   const filteredRooms = rooms.filter((room) => {
-    const matchesCategory =
-      activeCategory === "all" || room.mediaType === activeCategory;
-    const matchesSearch = `${room.title} ${room.host?.displayName ?? ""} ${room.roomCode}`
-      .toLowerCase()
-      .includes(search.trim().toLowerCase());
+    const matchesCategory = activeCategory === "all" || room.mediaType === activeCategory;
+    const matchesSearch = `${room.title} ${room.host?.displayName ?? ""} ${room.roomCode}`.toLowerCase().includes(search.trim().toLowerCase());
 
     return matchesCategory && matchesSearch;
   });
@@ -141,10 +126,7 @@ export default function Home() {
       router.push("/login");
       return;
     }
-    previousFocusRef.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setCreateError("");
     setIsCreateOpen(true);
   }
@@ -168,9 +150,7 @@ export default function Home() {
         router.push("/login");
         return;
       }
-      setCreateError(
-        error instanceof Error ? error.message : "Could not create the room.",
-      );
+      setCreateError(error instanceof Error ? error.message : "Could not create the room.");
     } finally {
       setIsSubmitting(false);
     }
@@ -178,7 +158,7 @@ export default function Home() {
 
   return (
     <div className={styles.page}>
-      <SiteHeader activePage="discover" onCreateRoom={openCreateRoom} />
+      <SiteHeader onCreateRoom={openCreateRoom} />
 
       <main id="top">
         <section className={styles.hero} aria-labelledby="hero-title">
@@ -194,15 +174,9 @@ export default function Home() {
               <br />
               <span>Share a moment.</span>
             </h1>
-            <p className={styles.heroDescription}>
-              Press play together.
-            </p>
+            <p className={styles.heroDescription}>Press play together.</p>
             <div className={styles.heroActions}>
-              <button
-                className={styles.primaryButton}
-                onClick={openCreateRoom}
-                type="button"
-              >
+              <button className={styles.primaryButton} onClick={openCreateRoom} type="button">
                 Start a room <span aria-hidden="true">&rarr;</span>
               </button>
               <a className={styles.textButton} href="#rooms">
@@ -228,14 +202,10 @@ export default function Home() {
             <label className={styles.searchBox}>
               <span className={styles.searchIcon} aria-hidden="true" />
               <span className={styles.srOnly}>Search rooms</span>
-              <input
-                ref={searchInputRef}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search rooms or hosts"
-                type="search"
-                value={search}
-              />
-              <kbd className={styles.searchShortcut} aria-hidden="true">/</kbd>
+              <input ref={searchInputRef} onChange={(event) => setSearch(event.target.value)} placeholder="Search rooms or hosts" type="search" value={search} />
+              <kbd className={styles.searchShortcut} aria-hidden="true">
+                /
+              </kbd>
             </label>
           </div>
 
@@ -244,13 +214,10 @@ export default function Home() {
               {categories.map((category) => (
                 <button
                   aria-pressed={activeCategory === category.id}
-                  className={
-                    activeCategory === category.id ? styles.categoryActive : ""
-                  }
+                  className={activeCategory === category.id ? styles.categoryActive : ""}
                   key={category.id}
                   onClick={() => setActiveCategory(category.id)}
-                  type="button"
-                >
+                  type="button">
                   {category.label}
                 </button>
               ))}
@@ -258,9 +225,7 @@ export default function Home() {
             {roomStatus === "ready" && (
               <span className={styles.roomCount} aria-live="polite">
                 <span className={styles.liveDot} />
-                {filteredRooms.length === rooms.length
-                  ? `${rooms.length} active ${rooms.length === 1 ? "room" : "rooms"}`
-                  : `${filteredRooms.length} of ${rooms.length} active rooms`}
+                {filteredRooms.length === rooms.length ? `${rooms.length} active ${rooms.length === 1 ? "room" : "rooms"}` : `${filteredRooms.length} of ${rooms.length} active rooms`}
               </span>
             )}
           </div>
@@ -287,13 +252,8 @@ export default function Home() {
             <div className={styles.roomGrid}>
               {filteredRooms.map((room, index) => (
                 <article className={styles.roomCard} key={room.id}>
-                  <div
-                    className={styles.roomPoster}
-                    style={{ backgroundImage: `url("${roomPosters[room.mediaType]}")` }}
-                  >
-                    <span className={styles.roomCategory}>
-                      {mediaLabels[room.mediaType]}
-                    </span>
+                  <div className={styles.roomPoster} style={{ backgroundImage: `url("${getRoomPoster(room)}")` }}>
+                    <span className={styles.roomCategory}>{mediaLabels[room.mediaType]}</span>
                     <span className={styles.viewerCount}>
                       <span className={styles.viewerIcon} aria-hidden="true" />
                       {room.participantCount ?? 0} watching
@@ -308,11 +268,7 @@ export default function Home() {
                         {room.isPrivate ? " · Private" : ""}
                       </p>
                     </div>
-                    <Link
-                      aria-label={`Join ${room.title}`}
-                      className={styles.joinButton}
-                      href={`/room/${room.id}`}
-                    >
+                    <Link aria-label={`Join ${room.title}`} className={styles.joinButton} href={`/room/${room.id}`}>
                       <span aria-hidden="true">&rarr;</span>
                     </Link>
                   </div>
@@ -328,7 +284,9 @@ export default function Home() {
             </div>
           ) : (
             <div className={styles.emptyState}>
-              <span className={styles.emptyMark} aria-hidden="true">+</span>
+              <span className={styles.emptyMark} aria-hidden="true">
+                +
+              </span>
               <p>No one is watching together right now.</p>
               <button onClick={openCreateRoom} type="button">
                 Start the first room
@@ -339,10 +297,7 @@ export default function Home() {
 
         <section className={styles.aboutSection} id="about">
           <span className={styles.aboutNumber}>A BETTER WAY TO PRESS PLAY</span>
-          <p>
-            The best part isn&apos;t just what you&apos;re watching. It&apos;s who
-            you&apos;re watching with.
-          </p>
+          <p>The best part isn&apos;t just what you&apos;re watching. It&apos;s who you&apos;re watching with.</p>
           <button onClick={openCreateRoom} type="button">
             Make it a moment <span aria-hidden="true">&rarr;</span>
           </button>
@@ -362,28 +317,12 @@ export default function Home() {
         <div
           className={styles.modalBackdrop}
           onMouseDown={(event) => {
-            if (
-              !isSubmitting &&
-              event.target === event.currentTarget
-            ) {
+            if (!isSubmitting && event.target === event.currentTarget) {
               setIsCreateOpen(false);
             }
-          }}
-        >
-          <section
-            aria-describedby="create-description"
-            aria-labelledby="create-title"
-            aria-modal="true"
-            className={styles.modal}
-            role="dialog"
-          >
-            <button
-              aria-label="Close dialog"
-              className={styles.modalClose}
-              disabled={isSubmitting}
-              onClick={() => setIsCreateOpen(false)}
-              type="button"
-            >
+          }}>
+          <section aria-describedby="create-description" aria-labelledby="create-title" aria-modal="true" className={styles.modal} role="dialog">
+            <button aria-label="Close dialog" className={styles.modalClose} disabled={isSubmitting} onClick={() => setIsCreateOpen(false)} type="button">
               &times;
             </button>
             <p className={styles.sectionEyebrow}>MAKE A LITTLE SPACE</p>
@@ -405,14 +344,13 @@ export default function Home() {
                 required
                 value={roomTitle}
               />
-              {createError && <p className={styles.formError} role="alert">{createError}</p>}
+              {createError && (
+                <p className={styles.formError} role="alert">
+                  {createError}
+                </p>
+              )}
               <div className={styles.modalActions}>
-                <button
-                  className={styles.cancelButton}
-                  disabled={isSubmitting}
-                  onClick={() => setIsCreateOpen(false)}
-                  type="button"
-                >
+                <button className={styles.cancelButton} disabled={isSubmitting} onClick={() => setIsCreateOpen(false)} type="button">
                   Cancel
                 </button>
                 <button className={styles.primaryButton} disabled={isSubmitting} type="submit">

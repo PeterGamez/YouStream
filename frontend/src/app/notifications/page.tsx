@@ -5,7 +5,7 @@ import styles from "./page.module.css";
 export default function NotificationsPage() {
   return (
     <div className={styles.page}>
-      <SiteHeader activePage="notifications" />
+      <SiteHeader />
       <main className={styles.main}>
         <p className={styles.eyebrow}>YOUR ACTIVITY</p>
         <h1>Notifications</h1>

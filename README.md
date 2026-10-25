@@ -63,6 +63,13 @@
 
 ## Local Development Workflow
 
+ดู [LOCAL_RUNBOOK.md](LOCAL_RUNBOOK.md) สำหรับคำสั่ง PowerShell แบบละเอียด,
+การใช้งาน offline, การตรวจระบบ และแนวทางทดสอบฐานข้อมูล production อย่างปลอดภัย
+โดยไม่เก็บ tokens หรือ secrets ในไฟล์
+
+หากต้องการฝึกอ่านและดูแลโค้ดด้วยตัวเอง ดู [MY_DEVELOPER_GUIDE.md](MY_DEVELOPER_GUIDE.md)
+สำหรับแผนที่ไฟล์ วงจรไล่บั๊ก แบบฝึกหัด และวิธีใช้ AI เป็นผู้ช่วยอย่างมีเป้าหมาย
+
 ### Requirements
 
 - Bun 1.4.x

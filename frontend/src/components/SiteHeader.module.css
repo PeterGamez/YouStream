@@ -32,23 +32,38 @@
   line-height: 1;
 }
 
-.nav {
-  display: flex;
+.signInLink,
+.profileLink {
+  display: inline-flex;
   align-items: center;
-  gap: 27px;
-  color: #aaa79f;
-  font-size: 13px;
-}
-
-.nav a,
-.signInLink {
   transition: color 160ms ease;
 }
 
-.nav a:hover,
-.nav .activeLink,
 .signInLink:hover {
   color: #f4f1e9;
+}
+
+.profileLink {
+  gap: 8px;
+  color: #e6dcff;
+  font-size: 12px;
+}
+
+.profileLink:hover {
+  color: #fff;
+}
+
+.profileAvatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(183, 151, 255, 0.48);
+  border-radius: 50%;
+  color: #17121f;
+  background: #b797ff;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .actions {
@@ -62,7 +77,6 @@
   font-size: 12px;
 }
 
-.messagesButton,
 .createButton {
   display: inline-flex;
   align-items: center;
@@ -70,29 +84,14 @@
   gap: 8px;
   min-height: 42px;
   padding: 0 13px;
-  border: 1px solid rgba(155, 107, 255, 0.48);
+  border: 1px solid #9b6bff;
   border-radius: 4px;
-  color: #e6dcff;
-  background: transparent;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.messagesButton:hover,
-.messagesButton[aria-expanded="true"] {
-  background: rgba(155, 107, 255, 0.13);
-}
-
-.messagesButton > span:first-child {
-  font-size: 17px;
-}
-
-.createButton {
-  border-color: #9b6bff;
   color: #17121f;
   background: #9b6bff;
+  font: inherit;
+  font-size: 12px;
   font-weight: 650;
+  cursor: pointer;
 }
 
 .createButton:hover {
@@ -101,78 +100,6 @@
 
 .createButton > span {
   font-size: 18px;
-}
-
-.messagesPopup {
-  position: absolute;
-  top: 68px;
-  right: 0;
-  width: min(340px, calc(100vw - 32px));
-  padding: 17px;
-  border: 1px solid rgba(244, 241, 233, 0.14);
-  border-radius: 5px;
-  color: #f4f1e9;
-  background: #191916;
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.52);
-  animation: popupIn 160ms ease-out both;
-}
-
-.popupHeading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.popupHeading h2 {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.popupHeading p,
-.popupCopy {
-  color: #99958d;
-  font-size: 11px;
-  line-height: 1.55;
-}
-
-.popupHeading p {
-  margin-top: 5px;
-}
-
-.popupHeading button {
-  border: 0;
-  color: #aaa79f;
-  background: transparent;
-  font: inherit;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-.popupCopy {
-  margin-top: 19px;
-  padding-top: 15px;
-  border-top: 1px solid rgba(244, 241, 233, 0.1);
-}
-
-.popupLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 15px;
-  color: #c7b0ff;
-  font-size: 11px;
-}
-
-@keyframes popupIn {
-  from {
-    transform: translateY(6px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
 }
 
 @media (max-width: 760px) {
@@ -193,15 +120,10 @@
     font-size: 22px;
   }
 
-  .nav {
-    display: none;
-  }
-
   .actions {
     gap: 7px;
   }
 
-  .messagesButton,
   .createButton {
     min-height: 38px;
     padding: 0 9px;
@@ -212,17 +134,13 @@
     font-size: 10px;
   }
 
-  .messagesPopup {
-    position: fixed;
-    top: auto;
-    right: 12px;
-    bottom: 12px;
-    width: min(340px, calc(100vw - 24px));
+  .profileLink {
+    gap: 6px;
+    font-size: 10px;
   }
-}
 
-@media (max-width: 390px) {
-  .messagesLabel {
-    display: none;
+  .profileAvatar {
+    width: 27px;
+    height: 27px;
   }
 }
