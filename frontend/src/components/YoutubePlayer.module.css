@@ -1,0 +1,190 @@
+.container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  overflow: hidden;
+}
+
+.playerWrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.playerTarget {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Host Container: full controls, no cropping */
+.hostContainer .playerWrapper {
+  width: 100%;
+  height: 100%;
+}
+
+.hostContainer iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* Participant Standard Mode: Uncropped */
+.standardViewerContainer .playerWrapper {
+  width: 100%;
+  height: 100%;
+}
+
+.standardViewerContainer iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  pointer-events: none;
+}
+
+/* Participant Clean Mode: Crops out top title bar (~54px) & bottom More Videos shelf (~54px) */
+.cleanViewerContainer {
+  overflow: hidden;
+}
+
+.cleanViewerContainer .playerWrapper {
+  position: absolute;
+  top: -54px;
+  left: 0;
+  width: 100%;
+  height: calc(100% + 108px);
+}
+
+.cleanViewerContainer iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  pointer-events: none;
+}
+
+/* Interactive overlay for participants */
+.viewerOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Floating unmute button for participants when browser blocks unmuted sound */
+.unmuteButton {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid rgba(183, 151, 255, 0.45);
+  border-radius: 9999px;
+  color: #fff;
+  background: rgba(18, 16, 26, 0.88);
+  backdrop-filter: blur(8px);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+  animation: pulseUnmute 2s infinite ease-in-out;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.unmuteButton:hover {
+  transform: scale(1.03);
+  background: rgba(30, 24, 45, 0.96);
+  border-color: #b797ff;
+}
+
+@keyframes pulseUnmute {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(183, 151, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(183, 151, 255, 0);
+  }
+}
+
+/* Clean pause badge that covers the YouTube center play button when host pauses */
+.pauseCard {
+  pointer-events: none;
+  animation: fadeIn 0.2s ease;
+}
+
+.pauseBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+  color: #f4f1e9;
+  background: rgba(16, 16, 18, 0.86);
+  backdrop-filter: blur(12px);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.pauseDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+/* Crop toggle button in bottom corner */
+.cropToggleButton {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 10;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: #aaa79f;
+  background: rgba(16, 16, 18, 0.72);
+  backdrop-filter: blur(6px);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.cropToggleButton:hover {
+  opacity: 1;
+  background: rgba(28, 26, 32, 0.95);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

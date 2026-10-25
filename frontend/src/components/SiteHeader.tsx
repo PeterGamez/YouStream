@@ -1,17 +1,61 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import { ApiError, PROFILE_CHANGE_EVENT, SESSION_CHANGE_EVENT, apiRequest, clearTokens, hasSession } from "../lib/api";
 import styles from "./SiteHeader.module.css";
 
 type SiteHeaderProps = {
-  activePage: "discover" | "notifications" | "messages";
   onCreateRoom?: () => void;
 };
 
-export default function SiteHeader({
-  activePage,
-  onCreateRoom,
-}: SiteHeaderProps) {
+type CurrentUser = {
+  displayName: string;
+};
+
+export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
+  const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
+  const [profileName, setProfileName] = useState("");
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    const updateSession = () => {
+      const signedIn = hasSession();
+      setIsSignedIn(signedIn);
+
+      if (!signedIn) {
+        setProfileName("");
+        return;
+      }
+
+      void apiRequest<CurrentUser>("/users/me")
+        .then((user) => {
+          if (isCurrent) setProfileName(user.displayName);
+        })
+        .catch((error: unknown) => {
+          if (!isCurrent) return;
+          if (error instanceof ApiError && error.status === 401) {
+            clearTokens();
+            return;
+          }
+          setProfileName("");
+        });
+    };
+
+    updateSession();
+    window.addEventListener("storage", updateSession);
+    window.addEventListener(SESSION_CHANGE_EVENT, updateSession);
+    window.addEventListener(PROFILE_CHANGE_EVENT, updateSession);
+    return () => {
+      isCurrent = false;
+      window.removeEventListener("storage", updateSession);
+      window.removeEventListener(SESSION_CHANGE_EVENT, updateSession);
+      window.removeEventListener(PROFILE_CHANGE_EVENT, updateSession);
+    };
+  }, []);
+
   return (
     <header className={styles.header}>
       <Link className={styles.brand} href="/" aria-label="YouStream home">
@@ -19,49 +63,28 @@ export default function SiteHeader({
         <span>YouStream</span>
       </Link>
 
-      <nav className={styles.nav} aria-label="Main navigation">
-        <Link
-          className={activePage === "discover" ? styles.activeLink : ""}
-          href="/#rooms"
-        >
-          Discover
-        </Link>
-        <Link
-          className={activePage === "messages" ? styles.activeLink : ""}
-          href="/messages"
-        >
-          Messages
-        </Link>
-        <Link
-          className={activePage === "notifications" ? styles.activeLink : ""}
-          href="/notifications"
-        >
-          Notifications
-        </Link>
-      </nav>
-
-      <div className={styles.actions}>
-        <Link className={styles.signInLink} href="/login">
-          Sign in
-        </Link>
-        <Link
-          aria-label="Messages"
-          className={styles.messagesButton}
-          href="/messages"
-        >
-          <span aria-hidden="true">&#9993;</span>
-          <span className={styles.messagesLabel}>Messages</span>
-        </Link>
-        {onCreateRoom && (
-          <button
-            className={styles.createButton}
-            onClick={onCreateRoom}
-            type="button"
-          >
-            <span aria-hidden="true">+</span> Create room
-          </button>
-        )}
-      </div>
+      {(isSignedIn !== null || onCreateRoom) && (
+        <div className={styles.actions}>
+          {isSignedIn === false && (
+            <Link className={styles.signInLink} href="/login">
+              Sign in
+            </Link>
+          )}
+          {isSignedIn === true && (
+            <Link aria-label="Edit profile" className={styles.profileLink} href="/profile">
+              <span aria-hidden="true" className={styles.profileAvatar}>
+                {(profileName || "P").slice(0, 1).toUpperCase()}
+              </span>
+              <span>{profileName || "Profile"}</span>
+            </Link>
+          )}
+          {onCreateRoom && (
+            <button className={styles.createButton} onClick={onCreateRoom} type="button">
+              <span aria-hidden="true">+</span> Create room
+            </button>
+          )}
+        </div>
+      )}
     </header>
   );
 }

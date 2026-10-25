@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { io, type Socket } from "socket.io-client";
-import {
-  ApiError,
-  apiRequest,
-  clearTokens,
-  getAccessToken,
-  getSocketUrl,
-} from "../../../lib/api";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type Socket, io } from "socket.io-client";
+
+import YoutubePlayer from "../../../components/YoutubePlayer";
+import { ApiError, apiRequest, clearTokens, getAccessToken } from "../../../lib/api";
 import styles from "./page.module.css";
+import config from "@/config";
 
 type Room = {
   id: number;
@@ -30,6 +27,7 @@ type ChatMessage = {
   senderName: string;
   message: string;
   createdAt: string;
+  messageType?: "chat" | "system";
 };
 
 type Participant = { userId: number; displayName: string; role: string };
@@ -51,6 +49,19 @@ type RoomJoined = {
 
 type SocketError = { code?: string; message?: string };
 type MediaUploadResponse = { mediaId: number; title: string; fileUrl: string };
+type PlaybackAction = "play" | "pause" | "seek" | "ratechange";
+type YoutubeSync = { action: PlaybackAction; currentTime: number; speed?: number };
+
+function createSystemMessage(message: string): ChatMessage {
+  return {
+    id: `system_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    senderId: 0,
+    senderName: "Room",
+    message,
+    messageType: "system",
+    createdAt: new Date().toISOString(),
+  };
+}
 
 function readUserId(token: string | null) {
   try {
@@ -64,7 +75,24 @@ function readUserId(token: string | null) {
 }
 
 function extractYoutubeId(value: string) {
-  return value.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1] ?? "";
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.replace(/^www\./, "");
+    if (hostname === "youtu.be") {
+      return (
+        url.pathname
+          .split("/")
+          .filter(Boolean)[0]
+          ?.match(/^[\w-]{11}$/)?.[0] ?? ""
+      );
+    }
+    if (hostname !== "youtube.com" && hostname !== "youtube-nocookie.com") return "";
+
+    const videoId = url.searchParams.get("v") ?? url.pathname.match(/^\/(?:embed|v|shorts|live)\/([\w-]{11})/)?.[1];
+    return videoId?.match(/^[\w-]{11}$/)?.[0] ?? "";
+  } catch {
+    return "";
+  }
 }
 
 export default function RoomPage() {
@@ -82,6 +110,7 @@ export default function RoomPage() {
   const [status, setStatus] = useState("Connecting to room...");
   const [error, setError] = useState("");
   const [playback, setPlayback] = useState<PlaybackState | null>(null);
+  const [youtubeSync, setYoutubeSync] = useState<YoutubeSync | null>(null);
   const [mediaMode, setMediaMode] = useState<"youtube" | "upload">("youtube");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeTitle, setYoutubeTitle] = useState("");
@@ -117,7 +146,7 @@ export default function RoomPage() {
           return;
         }
 
-        activeSocket = io(getSocketUrl(), {
+        activeSocket = io(config.wsUrl, {
           autoConnect: false,
           auth: { token },
         });
@@ -132,24 +161,23 @@ export default function RoomPage() {
           setParticipants(data.participants || []);
           setParticipantCount(data.participants?.length ?? 0);
           setPlayback(data.playbackState);
+          setYoutubeSync(null);
           setYoutubeVideoId(extractYoutubeId(data.playbackState.sourceUrl || ""));
           setStatus("Connected");
           setError("");
         });
         activeSocket.on("room:user-joined", (participant: Participant) => {
           setParticipantCount((count) => count + 1);
-          setParticipants((current) => current.some((item) => item.userId === participant.userId)
-            ? current
-            : [...current, participant]);
+          setParticipants((current) => (current.some((item) => item.userId === participant.userId) ? current : [...current, participant]));
+          setMessages((current) => [...current, createSystemMessage(`${participant.displayName || "A viewer"} joined the room.`)].slice(-100));
         });
-        activeSocket.on("room:user-left", (participant: { userId: number }) => {
+        activeSocket.on("room:user-left", (participant: { userId: number; displayName?: string }) => {
           setParticipantCount((count) => Math.max(0, count - 1));
           setParticipants((current) => current.filter((item) => item.userId !== participant.userId));
+          setMessages((current) => [...current, createSystemMessage(`${participant.displayName || "A viewer"} left the room.`)].slice(-100));
         });
         activeSocket.on("room:participant-updated", (update: { userId: number; role: string }) => {
-          setParticipants((current) => current.map((participant) => participant.userId === update.userId
-            ? { ...participant, role: update.role }
-            : participant));
+          setParticipants((current) => current.map((participant) => (participant.userId === update.userId ? { ...participant, role: update.role } : participant)));
         });
         activeSocket.on("chat:new-message", (message: ChatMessage) => {
           setMessages((current) => [...current, message].slice(-100));
@@ -170,12 +198,14 @@ export default function RoomPage() {
             isPlaying: false,
             playbackSpeed: 1,
           });
+          setYoutubeSync(null);
           setYoutubeVideoId(update.youtubeId || extractYoutubeId(sourceUrl));
           setMediaStatus(update.title ? `Now playing: ${update.title}` : "Room video updated.");
           setMediaError("");
           setIsUploading(false);
         });
         activeSocket.on("video:sync", (sync: { action: "play" | "pause" | "seek" | "ratechange"; currentTime: number; speed?: number }) => {
+          setYoutubeSync(sync);
           const video = videoRef.current;
           if (!video || !Number.isFinite(sync.currentTime)) return;
           if (sync.action === "seek" || Math.abs(video.currentTime - sync.currentTime) > 1.5) {
@@ -197,9 +227,7 @@ export default function RoomPage() {
           router.replace("/login");
           return;
         }
-        setError(
-          joinError instanceof Error ? joinError.message : "Could not load this room.",
-        );
+        setError(joinError instanceof Error ? joinError.message : "Could not load this room.");
         setStatus("Unable to join");
       }
     }
@@ -288,19 +316,17 @@ export default function RoomPage() {
     }
   }
 
-  function sendPlaybackControl(action: "play" | "pause" | "seek" | "ratechange", video: HTMLVideoElement) {
+  function sendPlaybackControl(action: PlaybackAction, currentTime: number, speed: number) {
     if (!isHost || !socketRef.current?.connected) return;
     socketRef.current.emit("video:control", {
       roomId: Number(params.roomId),
       action,
-      currentTime: video.currentTime,
-      speed: video.playbackRate,
+      currentTime,
+      speed,
     });
   }
 
-  const localVideoUrl = playback?.sourceUrl
-    ? new URL(playback.sourceUrl, getSocketUrl()).toString()
-    : "";
+  const localVideoUrl = playback?.sourceUrl ? new URL(playback.sourceUrl, config.wsUrl).toString() : "";
 
   return (
     <main className={styles.page}>
@@ -329,7 +355,9 @@ export default function RoomPage() {
 
       {participants.length > 0 && (
         <section aria-label="Room participants" className={styles.participants}>
-          <h2>Here now <span>{participants.length}</span></h2>
+          <h2>
+            Here now <span>{participants.length}</span>
+          </h2>
           <ul>
             {participants.map((participant) => (
               <li key={participant.userId}>
@@ -347,29 +375,54 @@ export default function RoomPage() {
       {isHost && (
         <section aria-label="Host media controls" className={styles.hostControls}>
           <div className={styles.hostControlsHeading}>
-            <div><p className={styles.eyebrow}>HOST CONTROLS</p><h2>Choose what to watch</h2></div>
+            <div>
+              <p className={styles.eyebrow}>HOST CONTROLS</p>
+              <h2>Choose what to watch</h2>
+            </div>
             <div className={styles.mediaTabs} aria-label="Media source">
-              <button aria-pressed={mediaMode === "youtube"} onClick={() => setMediaMode("youtube")} type="button">YouTube</button>
-              <button aria-pressed={mediaMode === "upload"} onClick={() => setMediaMode("upload")} type="button">Upload</button>
+              <button aria-pressed={mediaMode === "youtube"} onClick={() => setMediaMode("youtube")} type="button">
+                YouTube
+              </button>
+              <button aria-pressed={mediaMode === "upload"} onClick={() => setMediaMode("upload")} type="button">
+                Upload
+              </button>
             </div>
           </div>
           {mediaMode === "youtube" ? (
-            <form className={styles.mediaForm} onSubmit={submitYoutube}>
-              <label className={styles.visuallyHidden} htmlFor="youtube-url">YouTube video URL</label>
+            <form className={styles.mediaForm} key="youtube" onSubmit={submitYoutube}>
+              <label className={styles.visuallyHidden} htmlFor="youtube-url">
+                YouTube video URL
+              </label>
               <input id="youtube-url" onChange={(event) => setYoutubeUrl(event.target.value)} placeholder="Paste a YouTube link" type="url" value={youtubeUrl} />
-              <label className={styles.visuallyHidden} htmlFor="youtube-title">Video title</label>
+              <label className={styles.visuallyHidden} htmlFor="youtube-title">
+                Video title
+              </label>
               <input id="youtube-title" onChange={(event) => setYoutubeTitle(event.target.value)} placeholder="Title (optional)" value={youtubeTitle} />
-              <button disabled={!youtubeUrl.trim() || status !== "Connected"} type="submit">Play for room</button>
+              <button disabled={!youtubeUrl.trim() || status !== "Connected"} type="submit">
+                Play for room
+              </button>
             </form>
           ) : (
-            <form className={styles.mediaForm} onSubmit={uploadVideo}>
-              <label className={styles.filePicker} htmlFor="room-video">{selectedFile?.name || "Choose MP4 or WebM (up to 500 MB)"}</label>
+            <form className={styles.mediaForm} key="upload" onSubmit={uploadVideo}>
+              <label className={styles.filePicker} htmlFor="room-video">
+                {selectedFile?.name || "Choose MP4 or WebM (up to 500 MB)"}
+              </label>
               <input accept="video/mp4,video/webm" className={styles.visuallyHidden} id="room-video" onChange={(event) => setSelectedFile(event.target.files?.[0] || null)} type="file" />
-              <button disabled={!selectedFile || isUploading || status !== "Connected"} type="submit">{isUploading ? "Uploading..." : "Upload and play"}</button>
+              <button disabled={!selectedFile || isUploading || status !== "Connected"} type="submit">
+                {isUploading ? "Uploading..." : "Upload and play"}
+              </button>
             </form>
           )}
-          {mediaError && <p className={styles.error} role="alert">{mediaError}</p>}
-          {mediaStatus && <p aria-live="polite" className={styles.mediaStatus}>{mediaStatus}</p>}
+          {mediaError && (
+            <p className={styles.error} role="alert">
+              {mediaError}
+            </p>
+          )}
+          {mediaStatus && (
+            <p aria-live="polite" className={styles.mediaStatus}>
+              {mediaStatus}
+            </p>
+          )}
         </section>
       )}
 
@@ -379,28 +432,31 @@ export default function RoomPage() {
             <video
               className={styles.video}
               controls={isHost}
-              onPause={(event) => sendPlaybackControl("pause", event.currentTarget)}
-              onPlay={(event) => sendPlaybackControl("play", event.currentTarget)}
-              onRateChange={(event) => sendPlaybackControl("ratechange", event.currentTarget)}
-              onSeeked={(event) => sendPlaybackControl("seek", event.currentTarget)}
+              onPause={(event) => sendPlaybackControl("pause", event.currentTarget.currentTime, event.currentTarget.playbackRate)}
+              onPlay={(event) => sendPlaybackControl("play", event.currentTarget.currentTime, event.currentTarget.playbackRate)}
+              onRateChange={(event) => sendPlaybackControl("ratechange", event.currentTarget.currentTime, event.currentTarget.playbackRate)}
+              onSeeked={(event) => sendPlaybackControl("seek", event.currentTarget.currentTime, event.currentTarget.playbackRate)}
               ref={videoRef}
               src={localVideoUrl}
             />
           ) : playback?.mediaType === "youtube" && youtubeVideoId ? (
-            <iframe
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              className={styles.video}
-              src={`https://www.youtube-nocookie.com/embed/${youtubeVideoId}`}
-              title={room?.title || "Shared YouTube video"}
+            <YoutubePlayer
+              currentTime={playback.currentTime}
+              isHost={isHost}
+              isPlaying={playback.isPlaying}
+              onControl={sendPlaybackControl}
+              onError={setMediaError}
+              playbackSpeed={playback.playbackSpeed}
+              sync={youtubeSync}
+              videoId={youtubeVideoId}
             />
           ) : (
             <div className={styles.videoPlaceholder}>
-              <span className={styles.playGlyph} aria-hidden="true">&#9654;</span>
-              <p>Your shared screen will appear here.</p>
-              <span className={styles.mediaHint}>
-                {room?.mediaType === "none" ? "No video selected" : "Waiting for room state"}
+              <span className={styles.playGlyph} aria-hidden="true">
+                &#9654;
               </span>
+              <p>Your shared screen will appear here.</p>
+              <span className={styles.mediaHint}>{room?.mediaType === "none" ? "No video selected" : "Waiting for room state"}</span>
             </div>
           )}
         </section>
@@ -414,13 +470,17 @@ export default function RoomPage() {
             <span className={styles.chatLive}>LIVE</span>
           </div>
 
-          {error && <p className={styles.error} role="alert">{error}</p>}
+          {error && (
+            <p className={styles.error} role="alert">
+              {error}
+            </p>
+          )}
           <div aria-live="polite" className={styles.messageList}>
             {messages.length === 0 ? (
               <p className={styles.emptyChat}>Say hello to everyone in the room.</p>
             ) : (
               messages.map((message) => (
-                <article className={styles.chatMessage} key={message.id}>
+                <article className={message.messageType === "system" ? styles.systemMessage : styles.chatMessage} key={message.id}>
                   <div className={styles.messageMeta}>
                     <strong>{message.senderName || "YouStream member"}</strong>
                     <time>{new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
@@ -450,9 +510,7 @@ export default function RoomPage() {
           </form>
         </aside>
       </div>
-      {room?.isPrivate && (
-        <p className={styles.privateNote}>This is a private room. A passcode is required to join as a viewer.</p>
-      )}
+      {room?.isPrivate && <p className={styles.privateNote}>This is a private room. A passcode is required to join as a viewer.</p>}
     </main>
   );
 }
