@@ -1,4 +1,5 @@
 import Link from "next/link";
+
 import SiteHeader from "../../components/SiteHeader";
 import styles from "./page.module.css";
 
@@ -12,13 +13,14 @@ export default function NotificationsPage() {
         <p className={styles.subtitle}>Invitations and updates from your watch circle.</p>
 
         <section aria-label="Notifications" className={styles.emptyState}>
-          <span className={styles.icon} aria-hidden="true">!</span>
+          <span className={styles.icon} aria-hidden="true">
+            !
+          </span>
           <h2>No notifications yet</h2>
-          <p>
-            This page is ready for real notifications. The backend does not have
-            a notification endpoint yet.
-          </p>
-          <Link href="/#rooms">Browse watch rooms <span aria-hidden="true">&rarr;</span></Link>
+          <p>This page is ready for real notifications. The backend does not have a notification endpoint yet.</p>
+          <Link href="/#rooms">
+            Browse watch rooms <span aria-hidden="true">&rarr;</span>
+          </Link>
         </section>
       </main>
     </div>
