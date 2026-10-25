@@ -6,8 +6,9 @@ import { type Socket, io } from "socket.io-client";
 
 import SiteHeader from "../../components/SiteHeader";
 import { type Room, listActiveRooms } from "../../features/rooms/api";
-import { ApiError, clearTokens, getAccessToken, getSocketUrl, hasSession } from "../../lib/api";
+import { ApiError, clearTokens, getAccessToken, hasSession } from "../../lib/api";
 import styles from "./page.module.css";
+import config from "@/config";
 
 type ChatMessage = {
   id: string;
@@ -34,7 +35,7 @@ function RoomConversation({ room }: { room: Room }) {
     }
 
     let isCurrent = true;
-    const socket = io(getSocketUrl(), { autoConnect: false, auth: { token } });
+    const socket = io(config.wsUrl, { autoConnect: false, auth: { token } });
     socketRef.current = socket;
 
     socket.on("connect", () => socket.emit("room:join", { roomId: room.id }));

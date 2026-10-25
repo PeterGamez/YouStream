@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+import config from "@/config";
 
 const ACCESS_TOKEN_KEY = "youstream.accessToken";
 const REFRESH_TOKEN_KEY = "youstream.refreshToken";
@@ -92,7 +92,7 @@ async function send<T>(path: string, init: RequestInit, accessToken?: string) {
     headers.set("Authorization", `Bearer ${accessToken}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(`${config.apiUrl}${path}`, {
     ...init,
     headers,
   });
@@ -134,8 +134,4 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}) {
     if (!refreshedToken) throw error;
     return send<T>(path, init, refreshedToken);
   }
-}
-
-export function getSocketUrl() {
-  return API_BASE_URL;
 }

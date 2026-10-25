@@ -6,8 +6,9 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { type Socket, io } from "socket.io-client";
 
 import YoutubePlayer from "../../../components/YoutubePlayer";
-import { ApiError, apiRequest, clearTokens, getAccessToken, getSocketUrl } from "../../../lib/api";
+import { ApiError, apiRequest, clearTokens, getAccessToken } from "../../../lib/api";
 import styles from "./page.module.css";
+import config from "@/config";
 
 type Room = {
   id: number;
@@ -145,7 +146,7 @@ export default function RoomPage() {
           return;
         }
 
-        activeSocket = io(getSocketUrl(), {
+        activeSocket = io(config.wsUrl, {
           autoConnect: false,
           auth: { token },
         });
@@ -325,7 +326,7 @@ export default function RoomPage() {
     });
   }
 
-  const localVideoUrl = playback?.sourceUrl ? new URL(playback.sourceUrl, getSocketUrl()).toString() : "";
+  const localVideoUrl = playback?.sourceUrl ? new URL(playback.sourceUrl, config.wsUrl).toString() : "";
 
   return (
     <main className={styles.page}>
