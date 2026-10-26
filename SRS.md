@@ -23,14 +23,14 @@
 | ลำดับ | รหัสนักศึกษา | ชื่อ - นามสกุล | บทบาทหน้าที่หลัก (Role) | GitHub Username |
 | :---: | :---: | :--- | :--- | :--- |
 | 1 | 6730300108 | นายชนกันต์ เขียวภักดี | Backend Developer / Database Designer | [@PeteGamez](https://github.com/PeteGamez) |
-| 2 |  |  | Frontend Developer / UI Designer | [@Snowhazee](https://github.com/Snowhazee) |
+| 2 | 6730300183  | นายทะยานชล สว่างศรี | Frontend Developer / UI Designer | [@Snowhazee](https://github.com/Snowhazee) |
 
 ---
 
 ## 🔗 ลิงก์ที่เกี่ยวข้อง (Important Deliverables Links)
 - **Production URL (Deployed App):** [แนบลิงก์ที่ Deploy จริง เช่น Vercel / Railway]
-- **GitHub Repository:** [https://github.com/PeterGamez/YouStream](https://github.com/PeterGamez/YouStream)
-- **Figma Prototype:** [แนบลิงก์ Figma ที่แชร์สิทธิ์ Viewer]
+- **GitHub Repository:** [Github](https://github.com/PeterGamez/YouStream)
+- **Figma Prototype:** [Figma](https://www.figma.com/design/m3WwqivIb8txZGfrrGvg5h/YouStream)
 - **Video Presentation & Demo:** [แนบลิงก์คลิป Unlisted เช่น YouTube / Google Drive]
 
 ### 🔑 บัญชีสำหรับทดสอบระบบ (Test Accounts)
