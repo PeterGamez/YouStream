@@ -29,8 +29,8 @@
 
 ## 🔗 ลิงก์ที่เกี่ยวข้อง (Important Deliverables Links)
 - **Production URL (Deployed App):** [แนบลิงก์ที่ Deploy จริง เช่น Vercel / Railway]
-- **GitHub Repository:** [https://github.com/PeterGamez/YouStream](https://github.com/PeterGamez/YouStream)
-- **Figma Prototype:** [[แนบลิงก์ Figma ที่แชร์สิทธิ์ Viewer](https://www.figma.com/design/m3WwqivIb8txZGfrrGvg5h/Untitled?node-id=0-1&t=dpig3UmQN3bl1UV1-1)]
+- **GitHub Repository:** [Github](https://github.com/PeterGamez/YouStream)
+- **Figma Prototype:** [Figma](https://www.figma.com/design/m3WwqivIb8txZGfrrGvg5h/YouStream)
 - **Video Presentation & Demo:** [แนบลิงก์คลิป Unlisted เช่น YouTube / Google Drive]
 
 ### 🔑 บัญชีสำหรับทดสอบระบบ (Test Accounts)
