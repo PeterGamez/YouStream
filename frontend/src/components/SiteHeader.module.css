@@ -33,14 +33,21 @@
 }
 
 .signInLink,
-.profileLink {
+.profileLink,
+.adminLink {
   display: inline-flex;
   align-items: center;
   transition: color 160ms ease;
 }
 
-.signInLink:hover {
+.signInLink:hover,
+.adminLink:hover {
   color: #f4f1e9;
+}
+
+.adminLink {
+  color: #c7b0ff;
+  font-size: 12px;
 }
 
 .profileLink {
@@ -139,6 +146,10 @@
   }
 
   .signInLink {
+    font-size: 10px;
+  }
+
+  .adminLink {
     font-size: 10px;
   }
 
