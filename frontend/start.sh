@@ -17,8 +17,8 @@ fi
 # ส่ง Ctrl+C เพื่อหยุด process เดิมที่อาจรันอยู่
 tmux send-keys -t "$session" C-c
 sleep 1
-
-# เข้าไปที่โฟลเดอร์ frontend และรันด้วย && เพื่อรอให้แต่ละคำสั่งทำงานเสร็จก่อน
-tmux send-keys -t "$session" "cd \"$PROJECT_DIR\"" Enter
-sleep 0.5
-tmux send-keys -t "$session" 'bun i && bun run build && bun run start' Enter
+tmux send-keys -t "$session" 'bun i' Enter
+sleep 1
+tmux send-keys -t "$session" 'bun run build' Enter
+sleep 1
+tmux send-keys -t "$session" 'bun run start' Enter
