@@ -1,17 +1,15 @@
 # Nginx Configuration Guide for YouStream
 
-คู่มือการติดตั้ง Nginx บน VPS (Ubuntu / Debian)
+คู่มือการติดตั้ง Nginx แบบรวมไฟล์เดียวสำหรับทั้ง Frontend และ Backend บน VPS (Ubuntu / Debian)
 
 ## 1. คัดลอกไฟล์ Config ไปยัง Nginx
 ```bash
-sudo cp nginx/frontend.conf /etc/nginx/sites-available/youstream-frontend.conf
-sudo cp nginx/backend.conf /etc/nginx/sites-available/youstream-backend.conf
+sudo cp nginx/youstream.conf /etc/nginx/sites-available/youstream.conf
 ```
 
-## 2. ทำ Symlink เพื่อ Enable Sites
+## 2. ทำ Symlink เพื่อ Enable Site
 ```bash
-sudo ln -s /etc/nginx/sites-available/youstream-frontend.conf /etc/nginx/sites-enabled/
-sudo ln -s /etc/nginx/sites-available/youstream-backend.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/youstream.conf /etc/nginx/sites-enabled/
 ```
 
 ## 3. ตรวจสอบ Syntax และ Reload Nginx
@@ -25,4 +23,4 @@ sudo systemctl reload nginx
 sudo apt update && sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d youstream.alltime.in.th -d back-youstream.alltime.in.th
 ```
-Certbot จะทำการตั้งค่า SSL และ Redirect HTTP -> HTTPS ให้โดยอัตโนมัติ
+Certbot จะตรวจจับ domain ทั้งสองจากไฟล์ `youstream.conf` และสร้าง SSL certificate พร้อม redirect HTTP -> HTTPS ให้ในไฟล์เดียวอัตโนมัติ
