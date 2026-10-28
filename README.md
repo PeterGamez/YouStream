@@ -57,29 +57,6 @@
 
 ---
 
-## 🚀 Deployment with PM2
-
-สามารถจัดการ Process และรันทั้ง Backend และ Frontend ใน Production ผ่าน PM2 ด้วย `start.sh` และ `ecosystem.config.cjs`:
-
-```bash
-# ให้สิทธิ์ execute (ครั้งแรกบน Linux VPS)
-chmod +x start.sh
-
-# เริ่มต้นระบบ (Build อัตโนมัติหากยังไม่ได้ Build และเปิดผ่าน PM2)
-./start.sh
-
-# คำสั่งอื่นๆ ที่รองรับ
-./start.sh build            # ติดตั้ง dependencies และ build ทั้ง backend/frontend
-./start.sh start --build    # Rebuild ใหม่ทั้งหมดแล้ว start ด้วย PM2
-./start.sh restart          # สั่ง Restart ทุก Service ใน PM2
-./start.sh reload           # สั่ง Reload ทุก Service ใน PM2
-./start.sh stop             # หยุดการทำงาน
-./start.sh status           # ดูสถานะ Process ใน PM2
-./start.sh logs             # ดู Real-time logs ของระบบ
-```
-
----
-
 ## 📖 Complete Documentation
 สำหรับเอกสารข้อกำหนดความต้องการของซอฟต์แวร์ฉบับสมบูรณ์ (Software Requirements Specification) ซึ่งประกอบด้วย Data Dictionary, ER Diagram, สเปกของ In-Memory State บน Redis, รายการ Socket Events ทั้งหมด และสเปกของ RESTful API อย่างละเอียด สามารถศึกษาเพิ่มเติมได้ที่:
 * 📄 [SRS.md (Software Requirements Specification)](SRS.md)
