@@ -18,14 +18,15 @@ const categories = [
 
 type RoomFilter = (typeof categories)[number]["id"];
 const roomPosters: Record<RoomMediaType, string[]> = {
-  none: ["/images/room-custom.jpg", "/images/room-music.jpg"],
-  youtube: ["/images/room-series.jpg", "/images/room-music.jpg"],
+  none: ["/images/room-custom.png", "/images/room-music.png"],
+  youtube: ["/images/room-series.jpg", "/images/room-music.png"],
   local_file: ["/images/room-film.jpg", "/images/room-series.jpg"],
 };
 
 function getRoomPoster(room: Room) {
-  const posters = roomPosters[room.mediaType];
-  return posters[room.id % posters.length];
+  const posters = (room?.mediaType && roomPosters[room.mediaType]) || roomPosters.none;
+  const index = Math.abs(Number(room?.id) || 0) % posters.length;
+  return posters[index];
 }
 
 const mediaLabels: Record<RoomMediaType, string> = {
@@ -119,7 +120,7 @@ export default function Home() {
   const filteredRooms = rooms.filter((room) => {
     const matchesCategory = activeCategory === "all" || room.mediaType === activeCategory;
     const normalizedSearch = search.trim().toLowerCase();
-    const matchesSearch = [room.title, room.roomCode, room.host?.displayName ?? ""].some((value) => value.toLowerCase().includes(normalizedSearch));
+    const matchesSearch = [room.title, room.roomCode, room.host?.displayName].filter(Boolean).some((value) => (value || "").toLowerCase().includes(normalizedSearch));
 
     return matchesCategory && matchesSearch;
   });

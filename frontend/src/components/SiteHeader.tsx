@@ -49,7 +49,7 @@ export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
         })
         .catch((error: unknown) => {
           if (!isCurrent) return;
-          if (error instanceof ApiError && error.status === 401) {
+          if (error instanceof ApiError && (error.status === 401 || error.status === 404)) {
             clearTokens();
             return;
           }
