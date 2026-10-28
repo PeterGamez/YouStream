@@ -96,9 +96,10 @@ function extractYoutubeId(value: string) {
 }
 
 export default function RoomPage() {
-  const params = useParams<{ roomId: string }>();
+  const params = useParams<{ roomCode: string }>();
   const router = useRouter();
   const socketRef = useRef<Socket | null>(null);
+  const roomIdRef = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
   const [room, setRoom] = useState<Room | null>(null);
@@ -133,16 +134,17 @@ export default function RoomPage() {
       const accessToken = getAccessToken();
       const userId = readUserId(accessToken);
       setCurrentUserId(userId);
-      const roomId = Number(params.roomId);
-      if (!Number.isInteger(roomId) || roomId <= 0) {
+      const roomCode = params.roomCode?.trim();
+      if (!roomCode) {
         setError("This room address is invalid.");
         setStatus("Unable to join");
         return;
       }
 
       try {
-        const response = await apiRequest<{ room: Room }>(`/rooms/${roomId}`);
+        const response = await apiRequest<{ room: Room }>(`/rooms/code/${encodeURIComponent(roomCode)}`);
         if (!isCurrent) return;
+        roomIdRef.current = response.room.id;
         setRoom(response.room);
 
         if (!accessToken) {
@@ -163,7 +165,7 @@ export default function RoomPage() {
             setStatus("Passcode required");
             return;
           }
-          activeSocket?.emit("room:join", { roomId });
+          activeSocket?.emit("room:join", { roomId: response.room.id });
         });
         activeSocket.on("room:joined", (data: RoomJoined) => {
           setRoom(data.roomInfo);
@@ -259,12 +261,12 @@ export default function RoomPage() {
     return () => {
       isCurrent = false;
       if (activeSocket?.connected) {
-        activeSocket.emit("room:leave", { roomId: Number(params.roomId) });
+        activeSocket.emit("room:leave", { roomId: roomIdRef.current });
       }
       activeSocket?.disconnect();
       socketRef.current = null;
     };
-  }, [params.roomId, router]);
+  }, [params.roomCode, router]);
 
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -275,7 +277,7 @@ export default function RoomPage() {
     const message = draft.trim();
     if (!message || !socketRef.current?.connected) return;
     socketRef.current.emit("chat:send", {
-      roomId: Number(params.roomId),
+      roomId: roomIdRef.current,
       message,
     });
     setDraft("");
@@ -293,7 +295,7 @@ export default function RoomPage() {
     setMediaError("");
     setMediaStatus("Updating room video...");
     socketRef.current.emit("video:change", {
-      roomId: Number(params.roomId),
+      roomId: roomIdRef.current,
       sourceType: "youtube",
       youtubeId,
       title: youtubeTitle.trim() || "YouTube video",
@@ -325,7 +327,7 @@ export default function RoomPage() {
       });
       if (!socketRef.current?.connected) throw new Error("Connection lost after upload. Reopen the room and retry.");
       socketRef.current.emit("video:change", {
-        roomId: Number(params.roomId),
+        roomId: roomIdRef.current,
         sourceType: "local_file",
         mediaId: uploaded.mediaId,
         title: uploaded.title,
@@ -342,7 +344,7 @@ export default function RoomPage() {
   function sendPlaybackControl(action: PlaybackAction, currentTime: number, speed: number) {
     if (!isHost || !socketRef.current?.connected) return;
     socketRef.current.emit("video:control", {
-      roomId: Number(params.roomId),
+      roomId: roomIdRef.current,
       action,
       currentTime,
       speed,
@@ -356,18 +358,22 @@ export default function RoomPage() {
     setIsCheckingPasscode(true);
     setPasscodeError("");
     socketRef.current.emit("room:join", {
-      roomId: Number(params.roomId),
+      roomId: roomIdRef.current,
       passcode: roomPasscode.trim(),
     });
   }
 
   function handleLeaveRoom() {
     if (isHost) {
-      const confirmed = window.confirm("Are you sure you want to leave? As the host, leaving will close and delete this room.");
+      const confirmed = window.confirm("Are you sure you want to close and delete this room?");
       if (!confirmed) return;
     }
     if (socketRef.current?.connected) {
-      socketRef.current.emit("room:leave", { roomId: Number(params.roomId) });
+      if (isHost) {
+        socketRef.current.emit("room:end", { roomId: roomIdRef.current, reason: "Room has been closed by the host" });
+      } else {
+        socketRef.current.emit("room:leave", { roomId: roomIdRef.current });
+      }
     }
     router.push("/");
   }
@@ -381,8 +387,11 @@ export default function RoomPage() {
           className={styles.brand}
           href="/"
           onClick={(event) => {
-            if (isHost && !window.confirm("Are you sure you want to leave? As the host, leaving will close and delete this room.")) {
+            if (isHost && !window.confirm("Are you sure you want to close and delete this room?")) {
               event.preventDefault();
+            } else if (isHost) {
+              event.preventDefault();
+              handleLeaveRoom();
             }
           }}
         >

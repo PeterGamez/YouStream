@@ -36,7 +36,8 @@ export default class RoomRoute implements RouteInterface {
                     if (search) {
                         const titleMatch = (r.title || "").toLowerCase().includes(search);
                         const codeMatch = (r.roomCode || "").toLowerCase().includes(search);
-                        if (!titleMatch && !codeMatch) return false;
+                        const hostMatch = (r.host?.displayName || "").toLowerCase().includes(search);
+                        if (!titleMatch && !codeMatch && !hostMatch) return false;
                     }
 
                     if (mediaType !== "all" && r.mediaType !== mediaType) {

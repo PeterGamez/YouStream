@@ -104,7 +104,7 @@ function RoomConversation({ room }: { room: Room }) {
         </div>
         <div className={styles.headerActions}>
           <span className={connected ? styles.connected : styles.connection}>{connectionStatus}</span>
-          <Link href={`/room/${room.id}`} title="Open this watch room">
+          <Link href={`/room/${room.roomCode}`} title="Open this watch room">
             Open room
           </Link>
         </div>
