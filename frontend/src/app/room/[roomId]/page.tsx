@@ -119,6 +119,10 @@ export default function RoomPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [mediaError, setMediaError] = useState("");
   const [mediaStatus, setMediaStatus] = useState("");
+  const [passcodePromptOpen, setPasscodePromptOpen] = useState(false);
+  const [roomPasscode, setRoomPasscode] = useState("");
+  const [passcodeError, setPasscodeError] = useState("");
+  const [isCheckingPasscode, setIsCheckingPasscode] = useState(false);
   const isHost = room?.hostId === currentUserId;
 
   useEffect(() => {
@@ -126,7 +130,9 @@ export default function RoomPage() {
     let activeSocket: Socket | null = null;
 
     async function joinRoom() {
-      setCurrentUserId(readUserId(getAccessToken()));
+      const accessToken = getAccessToken();
+      const userId = readUserId(accessToken);
+      setCurrentUserId(userId);
       const roomId = Number(params.roomId);
       if (!Number.isInteger(roomId) || roomId <= 0) {
         setError("This room address is invalid.");
@@ -139,8 +145,7 @@ export default function RoomPage() {
         if (!isCurrent) return;
         setRoom(response.room);
 
-        const token = getAccessToken();
-        if (!token) {
+        if (!accessToken) {
           clearTokens();
           router.replace("/login");
           return;
@@ -148,11 +153,16 @@ export default function RoomPage() {
 
         activeSocket = io(config.wsUrl, {
           autoConnect: false,
-          auth: { token },
+          auth: { token: accessToken },
         });
         socketRef.current = activeSocket;
 
         activeSocket.on("connect", () => {
+          if (response.room.isPrivate && response.room.hostId !== userId) {
+            setPasscodePromptOpen(true);
+            setStatus("Passcode required");
+            return;
+          }
           activeSocket?.emit("room:join", { roomId });
         });
         activeSocket.on("room:joined", (data: RoomJoined) => {
@@ -183,8 +193,15 @@ export default function RoomPage() {
           setMessages((current) => [...current, message].slice(-100));
         });
         activeSocket.on("error", (socketError: SocketError) => {
-          setError(socketError.message || "Unable to join this room.");
-          setStatus("Unable to join");
+          if (socketError.code === "PASSCODE_REQUIRED" || socketError.code === "INVALID_PASSCODE") {
+            setPasscodePromptOpen(true);
+            setPasscodeError(socketError.code === "INVALID_PASSCODE" ? "The passcode is incorrect." : "");
+            setIsCheckingPasscode(false);
+            setStatus("Passcode required");
+          } else {
+            setError(socketError.message || "Unable to join this room.");
+            setStatus("Unable to join");
+          }
           setMediaError(socketError.message || "Could not update the room video.");
           setMediaStatus("");
           setIsUploading(false);
@@ -329,6 +346,18 @@ export default function RoomPage() {
       action,
       currentTime,
       speed,
+    });
+  }
+
+  function submitPasscode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (roomPasscode.trim().length < 4 || !socketRef.current?.connected) return;
+
+    setIsCheckingPasscode(true);
+    setPasscodeError("");
+    socketRef.current.emit("room:join", {
+      roomId: Number(params.roomId),
+      passcode: roomPasscode.trim(),
     });
   }
 
@@ -554,6 +583,33 @@ export default function RoomPage() {
         </aside>
       </div>
       {room?.isPrivate && <p className={styles.privateNote}>This is a private room. A passcode is required to join as a viewer.</p>}
+
+      {passcodePromptOpen && (
+        <div className={styles.passcodeBackdrop} role="presentation">
+          <form aria-labelledby="passcode-title" className={styles.passcodeModal} onSubmit={submitPasscode}>
+            <p className={styles.passcodeEyebrow}>PASSCODE PROTECTED</p>
+            <h2 id="passcode-title">Join {room?.title ?? "this room"}</h2>
+            <p>Enter the passcode shared by the host to enter the room.</p>
+            <label htmlFor="room-passcode">Passcode</label>
+            <input
+              autoFocus
+              id="room-passcode"
+              minLength={4}
+              onChange={(event) => setRoomPasscode(event.target.value)}
+              required
+              type="password"
+              value={roomPasscode}
+            />
+            {passcodeError && <p className={styles.passcodeError}>{passcodeError}</p>}
+            <div className={styles.passcodeActions}>
+              <Link href="/">Cancel</Link>
+              <button disabled={isCheckingPasscode || roomPasscode.trim().length < 4} type="submit">
+                {isCheckingPasscode ? "Checking..." : "Join room"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </main>
   );
 }

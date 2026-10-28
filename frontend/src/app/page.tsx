@@ -45,6 +45,8 @@ export default function Home() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [roomTitle, setRoomTitle] = useState("");
+  const [roomVisibility, setRoomVisibility] = useState<"public" | "private">("public");
+  const [roomPasscode, setRoomPasscode] = useState("");
   const [createError, setCreateError] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -128,6 +130,9 @@ export default function Home() {
     }
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setCreateError("");
+    setRoomTitle("");
+    setRoomVisibility("public");
+    setRoomPasscode("");
     setIsCreateOpen(true);
   }
 
@@ -136,13 +141,21 @@ export default function Home() {
 
     const title = roomTitle.trim();
     if (!title) return;
+    if (roomVisibility === "private" && roomPasscode.trim().length < 4) {
+      setCreateError("Passcodes must contain at least 4 characters.");
+      return;
+    }
 
     setIsSubmitting(true);
     setCreateError("");
     try {
-      const room = await createRoomRequest(title);
+      const room = await createRoomRequest(title, {
+        isPrivate: roomVisibility === "private",
+        passcode: roomVisibility === "private" ? roomPasscode.trim() : undefined,
+      });
       setIsCreateOpen(false);
       setRoomTitle("");
+      setRoomPasscode("");
       router.push(`/room/${room.id}`);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -344,6 +357,45 @@ export default function Home() {
                 required
                 value={roomTitle}
               />
+
+              <fieldset className={styles.visibilityFieldset}>
+                <legend className={styles.fieldLabel}>Room access</legend>
+                <div className={styles.visibilityOptions}>
+                  <label className={roomVisibility === "public" ? styles.visibilityOptionActive : styles.visibilityOption}>
+                    <input checked={roomVisibility === "public"} name="room-visibility" onChange={() => setRoomVisibility("public")} type="radio" value="public" />
+                    <span>
+                      <strong>Public</strong>
+                      <small>Anyone in the lobby can join</small>
+                    </span>
+                  </label>
+                  <label className={roomVisibility === "private" ? styles.visibilityOptionActive : styles.visibilityOption}>
+                    <input checked={roomVisibility === "private"} name="room-visibility" onChange={() => setRoomVisibility("private")} type="radio" value="private" />
+                    <span>
+                      <strong>Passcode protected</strong>
+                      <small>Viewers need a passcode</small>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+
+              {roomVisibility === "private" && (
+                <>
+                  <label className={styles.fieldLabel} htmlFor="room-passcode">
+                    Passcode
+                  </label>
+                  <input
+                    className={styles.roomTitleInput}
+                    id="room-passcode"
+                    minLength={4}
+                    onChange={(event) => setRoomPasscode(event.target.value)}
+                    placeholder="At least 4 characters"
+                    required
+                    type="password"
+                    value={roomPasscode}
+                  />
+                </>
+              )}
+
               {createError && (
                 <p className={styles.formError} role="alert">
                   {createError}

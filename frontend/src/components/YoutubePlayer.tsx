@@ -289,7 +289,6 @@ export default function YoutubePlayer({
       player.setPlaybackRate(sync.speed);
     }
     if (sync.action === "play") {
-      setIsPlayingState(true);
       try {
         player.playVideo();
       } catch {
@@ -301,7 +300,6 @@ export default function YoutubePlayer({
       }
     }
     if (sync.action === "pause") {
-      setIsPlayingState(false);
       player.pauseVideo();
     }
     suppressEventsUntilRef.current = Date.now() + 1000;

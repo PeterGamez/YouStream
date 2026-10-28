@@ -13,6 +13,7 @@ type SiteHeaderProps = {
 type CurrentUser = {
   displayName: string;
   avatarUrl?: string;
+  role?: string;
 };
 
 export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
@@ -20,6 +21,7 @@ export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
   const [profileName, setProfileName] = useState("");
   const [profileAvatar, setProfileAvatar] = useState("");
   const [avatarError, setAvatarError] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     let isCurrent = true;
@@ -32,6 +34,7 @@ export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
         setProfileName("");
         setProfileAvatar("");
         setAvatarError(false);
+        setIsAdmin(false);
         return;
       }
 
@@ -41,6 +44,7 @@ export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
             setProfileName(user.displayName);
             setProfileAvatar(user.avatarUrl || "");
             setAvatarError(false);
+            setIsAdmin(user.role === "admin");
           }
         })
         .catch((error: unknown) => {
@@ -51,6 +55,7 @@ export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
           }
           setProfileName("");
           setProfileAvatar("");
+          setIsAdmin(false);
         });
     };
 
@@ -75,6 +80,11 @@ export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
 
       {(isSignedIn !== null || onCreateRoom) && (
         <div className={styles.actions}>
+          {isSignedIn === true && isAdmin && (
+            <Link className={styles.adminLink} href="/admin">
+              Admin
+            </Link>
+          )}
           {isSignedIn === false && (
             <Link className={styles.signInLink} href="/login">
               Sign in

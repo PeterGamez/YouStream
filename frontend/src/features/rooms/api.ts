@@ -22,10 +22,15 @@ export async function listActiveRooms() {
   return response.rooms;
 }
 
-export async function createRoom(title: string) {
+export async function createRoom(title: string, options: { isPrivate?: boolean; passcode?: string } = {}) {
   const response = await apiRequest<RoomCreateResponse>("/rooms", {
     method: "POST",
-    body: JSON.stringify({ title, mediaType: "none" }),
+    body: JSON.stringify({
+      title,
+      mediaType: "none",
+      isPrivate: options.isPrivate ?? false,
+      passcode: options.passcode,
+    }),
   });
   return response.room;
 }
