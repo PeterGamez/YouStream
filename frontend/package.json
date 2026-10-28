@@ -4,9 +4,9 @@
     "bun": "1.4.x"
   },
   "scripts": {
-    "dev": "bun --bun next dev --webpack",
-    "build": "bun --bun next build --webpack",
-    "start": "bun --bun next start",
+    "dev": "bun --env-file=.env --bun next dev --webpack",
+    "build": "bun --env-file=.env --bun next build --webpack",
+    "start": "bun --env-file=.env --bun next start",
     "lint": "eslint 'src/**/*.{ts,tsx}' --fix",
     "format": "prettier --write 'src/**/*.{ts,tsx}' --config .prettierrc.ts"
   },
