@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# ไปที่ path ของ frontend เสมอ ไม่ว่าจะรันสคริปต์จากที่ไหน
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$PROJECT_DIR" || exit 1
+# ไปที่ path ของ frontend เสมอ (ใช้ $0 เพื่อให้รองรับทั้ง sh และ bash)
+cd "$(dirname "$0")" || exit 1
+PROJECT_DIR="$(pwd)"
 
 session="YouStream-Frontend"
 
@@ -16,6 +16,10 @@ fi
 
 # ส่ง Ctrl+C เพื่อหยุด process เดิมที่อาจรันอยู่
 tmux send-keys -t "$session" C-c
+sleep 1
+
+# เข้าไปที่โฟลเดอร์ frontend และเริ่มรันคำสั่ง
+tmux send-keys -t "$session" "cd \"$PROJECT_DIR\"" Enter
 sleep 1
 tmux send-keys -t "$session" 'bun i' Enter
 sleep 1
