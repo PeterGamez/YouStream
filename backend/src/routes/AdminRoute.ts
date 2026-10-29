@@ -343,11 +343,7 @@ export default class AdminRoute implements RouteInterface {
                 }
 
                 const allMedia = await MediaModel.selectAllMedia();
-                const activeFilePaths = new Set(
-                    allMedia
-                        .map((m) => (m.filePath ? path.resolve(m.filePath) : null))
-                        .filter((p): p is string => Boolean(p))
-                );
+                const activeFilePaths = new Set(allMedia.map((m) => (m.filePath ? path.resolve(m.filePath) : null)).filter((p): p is string => Boolean(p)));
 
                 const filesOnDisk = readdirSync(this.uploadDir);
                 let reclaimedFilesCount = 0;
