@@ -19,7 +19,7 @@ export default class MediaRoute implements RouteInterface {
     private server: Server;
     private readonly uploadDir: string;
 
-    private static readonly YOUTUBE_REGEX = /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/;
+    private static readonly YOUTUBE_REGEX = /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/;
     private static readonly MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
     private static readonly ALLOWED_MIME_TYPES = ["video/mp4", "video/webm"];
 
@@ -193,7 +193,8 @@ export default class MediaRoute implements RouteInterface {
                         throw streamError;
                     }
 
-                    const fileUrl = `/media/stream/${uniqueFilename}`;
+                    const apiPrefix = this.server.config.path === "/" ? "" : this.server.config.path;
+                    const fileUrl = `${apiPrefix}/media/stream/${uniqueFilename}`;
 
                     const mediaId = await MediaModel.createMedia(user.id, "local_file", file.name, fileUrl, null, targetPath, bytesWritten || file.size, file.type, null);
 

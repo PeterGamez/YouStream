@@ -38,7 +38,7 @@ export default class AdminRoute implements RouteInterface {
                 try {
                     activeRoomsCount = await RoomStateService.getActiveRoomCount();
                 } catch {
-                    const activeRooms = await RoomModel.selectActiveRooms();
+                    const activeRooms = await RoomModel.selectRooms();
                     activeRoomsCount = activeRooms.length;
                 }
 
@@ -160,7 +160,7 @@ export default class AdminRoute implements RouteInterface {
                     return c.json({ error: "User not found" }, 404);
                 }
 
-                const activeRooms = await RoomModel.selectActiveRoomsByHost(id);
+                const activeRooms = await RoomModel.selectRoomsByHost(id);
 
                 for (const room of activeRooms) {
                     let cleanedUp = false;
@@ -169,7 +169,7 @@ export default class AdminRoute implements RouteInterface {
 
                     for (let attempt = 1; attempt <= maxRetries; attempt++) {
                         try {
-                            await RoomModel.endRoom(room.id);
+                            await RoomModel.deleteRoom(room.id);
                             await RoomStateService.cleanupRoom(room.id);
                             RoomSocket.endRoom(room.id, "Room ended: Host account was suspended by administrator");
                             cleanedUp = true;
@@ -244,12 +244,17 @@ export default class AdminRoute implements RouteInterface {
                     return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                const room = await RoomModel.selectRoomByCode(code);
+                let room = await RoomModel.selectRoomByCode(code);
+                if (!room && !isNaN(Number(code))) {
+                    room = await RoomModel.selectRoom(Number(code));
+                }
                 if (!room) {
                     return c.json({ error: "Room not found" }, 404);
                 }
 
-                await RoomModel.endRoom(room.id);
+                RoomSocket.cancelHostDisconnect(room.id);
+
+                await RoomModel.deleteRoom(room.id);
 
                 try {
                     await RoomStateService.cleanupRoom(room.id);
@@ -263,10 +268,10 @@ export default class AdminRoute implements RouteInterface {
                     // ignore
                 }
 
-                this.server.log("Admin Route", `Room ${room.id} terminated by admin`);
+                this.server.log("Admin Route", `Room ${room.id} deleted by admin`);
 
                 return c.json({
-                    message: "Room terminated by administrator",
+                    message: "Room deleted by administrator",
                     roomId: room.id,
                     roomCode: room.roomCode,
                     endedAt: new Date().toISOString(),
@@ -338,14 +343,18 @@ export default class AdminRoute implements RouteInterface {
                 }
 
                 const allMedia = await MediaModel.selectAllMedia();
-                const activeFilePaths = new Set(allMedia.map((m) => m.filePath).filter((p): p is string => Boolean(p)));
+                const activeFilePaths = new Set(
+                    allMedia
+                        .map((m) => (m.filePath ? path.resolve(m.filePath) : null))
+                        .filter((p): p is string => Boolean(p))
+                );
 
                 const filesOnDisk = readdirSync(this.uploadDir);
                 let reclaimedFilesCount = 0;
                 let reclaimedSizeBytes = 0;
 
                 for (const file of filesOnDisk) {
-                    const fullPath = path.join(this.uploadDir, file);
+                    const fullPath = path.resolve(this.uploadDir, file);
                     if (!activeFilePaths.has(fullPath)) {
                         try {
                             const stat = statSync(fullPath);

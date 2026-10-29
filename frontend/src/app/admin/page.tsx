@@ -225,7 +225,7 @@ export default function AdminPage() {
   function endRoom(room: AdminRoom) {
     if (!window.confirm(`End “${room.title}”? Everyone currently watching will be removed from the room.`)) return;
     void runAction(`room-end-${room.id}`, `Ended room “${room.title}”.`, () =>
-      apiRequest(`/admin/rooms/${room.id}/end`, { method: "POST" })
+      apiRequest(`/admin/rooms/${room.roomCode}/end`, { method: "POST" })
     );
   }
 

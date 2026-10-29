@@ -144,15 +144,6 @@ export default class RoomSocket {
                 return;
             }
 
-            if (room.status !== "active") {
-                const errorPayload: SocketErrorPayload = {
-                    code: "ROOM_ENDED",
-                    message: "This room has ended and is no longer active",
-                };
-                socket.emit("error", errorPayload);
-                return;
-            }
-
             const session = await RoomStateService.getSocketSession(socket.id);
             let userId = socket.data?.userId || socket.data?.user?.id || session?.userId;
 
@@ -273,7 +264,6 @@ export default class RoomSocket {
                     title: room.title,
                     description: room.description,
                     hostId: room.hostId,
-                    status: room.status,
                     mediaType: room.mediaType,
                     currentMediaId: room.currentMediaId,
                     isPrivate: !!room.isPrivate,
@@ -321,7 +311,7 @@ export default class RoomSocket {
                 const participant = await RoomStateService.getParticipant(roomId, userId);
                 if (participant && participant.socketId === socket.id) {
                     const remainingSockets = await this.io.in(roomKey).fetchSockets();
-                    const otherSocket = remainingSockets.find((s) => (s.data?.userId || s.data?.user?.id) === userId);
+                    const otherSocket = remainingSockets.find((s) => s.id !== socket.id && (s.data?.userId || s.data?.user?.id) === userId);
 
                     if (otherSocket) {
                         participant.socketId = otherSocket.id;
@@ -464,7 +454,7 @@ export default class RoomSocket {
 
                 if (participant && participant.socketId === socket.id) {
                     const remainingSockets = await this.io.in(roomKey).fetchSockets();
-                    const otherSocket = remainingSockets.find((s) => (s.data?.userId || s.data?.user?.id) === session.userId);
+                    const otherSocket = remainingSockets.find((s) => s.id !== socket.id && (s.data?.userId || s.data?.user?.id) === session.userId);
 
                     if (otherSocket) {
                         participant.socketId = otherSocket.id;
