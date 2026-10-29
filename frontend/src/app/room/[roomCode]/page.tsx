@@ -201,6 +201,9 @@ export default function RoomPage() {
             setPasscodeError(socketError.code === "INVALID_PASSCODE" ? "The passcode is incorrect." : "");
             setIsCheckingPasscode(false);
             setStatus("Passcode required");
+          } else if (socketError.code === "CHAT_RATE_LIMIT" || socketError.code === "CHAT_EMPTY") {
+            setError(socketError.message || "Please wait a moment before sending another message.");
+            return;
           } else {
             setError(socketError.message || "Unable to join this room.");
             setStatus("Unable to join");
@@ -385,7 +388,7 @@ export default function RoomPage() {
     router.push("/");
   }
 
-  const localVideoUrl = playback?.sourceUrl ? new URL(playback.sourceUrl, config.wsUrl).toString() : "";
+  const localVideoUrl = playback?.sourceUrl ? new URL(playback.sourceUrl, config.apiUrl).toString() : "";
 
   return (
     <main className={styles.page}>

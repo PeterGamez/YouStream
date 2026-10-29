@@ -200,6 +200,27 @@ export default class RoomModel {
         }
     }
 
+    public static async selectRoomsByCurrentMediaId(mediaId: number): Promise<RoomInterface[]> {
+        const sql = `SELECT * FROM ${this.table} WHERE current_media_id = ?`;
+        const connection = await this.DB.getConnection();
+        try {
+            const [rows] = await connection.execute<RoomRawInterface[]>(sql, [mediaId]);
+            return rows.map((row) => this.mapRowToRoom(row)).filter((r): r is RoomInterface => r !== null);
+        } finally {
+            connection.release();
+        }
+    }
+
+    public static async clearCurrentMedia(mediaId: number): Promise<void> {
+        const sql = `UPDATE ${this.table} SET media_type = 'none', current_media_id = NULL WHERE current_media_id = ?`;
+        const connection = await this.DB.getConnection();
+        try {
+            await connection.execute(sql, [mediaId]);
+        } finally {
+            connection.release();
+        }
+    }
+
     public static async endRoom(id: number): Promise<void> {
         await this.deleteRoom(id);
     }

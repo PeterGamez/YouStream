@@ -22,7 +22,6 @@ type AdminRoom = {
   roomCode: string;
   title: string;
   hostId: number;
-  status: "active" | "ended";
   mediaType: "none" | "youtube" | "local_file";
   isPrivate: boolean;
   createdAt: string;
@@ -299,13 +298,7 @@ export default function AdminPage() {
     setPage(1);
   }
 
-  const roomCounts = useMemo(() => {
-    const rooms = data?.rooms || [];
-    return {
-      active: rooms.filter((room) => room.status === "active").length,
-      ended: rooms.filter((room) => room.status !== "active").length,
-    };
-  }, [data?.rooms]);
+  const totalActiveRooms = useMemo(() => (data?.rooms || []).length, [data?.rooms]);
 
   const navItems: { key: Section; label: string; icon: string }[] = [
     { key: "overview", label: "Overview", icon: "overview" },
@@ -476,23 +469,19 @@ export default function AdminPage() {
                       </div>
                       <div className={styles.roomSummary}>
                         <div className={styles.roomSummaryNumber}>
-                          {roomCounts.active}
+                          {totalActiveRooms}
                           <span> active</span>
                         </div>
-                        <div className={styles.roomBar} aria-label={`${roomCounts.active} active and ${roomCounts.ended} ended rooms`}>
+                        <div className={styles.roomBar} aria-label={`${totalActiveRooms} active rooms`}>
                           <span
                             className={styles.roomBarActive}
-                            style={{ width: `${roomCounts.active + roomCounts.ended === 0 ? 0 : (roomCounts.active / (roomCounts.active + roomCounts.ended)) * 100}%` }}
+                            style={{ width: `${totalActiveRooms > 0 ? 100 : 0}%` }}
                           />
                         </div>
                         <div className={styles.legend}>
                           <span>
                             <i className={styles.legendActive} />
-                            Active <b>{roomCounts.active}</b>
-                          </span>
-                          <span>
-                            <i className={styles.legendEnded} />
-                            Ended <b>{roomCounts.ended}</b>
+                            Active rooms <b>{totalActiveRooms}</b>
                           </span>
                         </div>
                       </div>
@@ -586,11 +575,7 @@ export default function AdminPage() {
                     <div className={styles.statusLegend}>
                       <span>
                         <i className={styles.legendActive} />
-                        Active {roomCounts.active}
-                      </span>
-                      <span>
-                        <i className={styles.legendEnded} />
-                        Ended {roomCounts.ended}
+                        Active rooms {totalActiveRooms}
                       </span>
                     </div>
                   </div>
@@ -789,7 +774,6 @@ function RoomTable({ rooms, actionKey, onEnd }: { rooms: AdminRoom[]; actionKey:
             <th>Room</th>
             <th>Host ID</th>
             <th>Media</th>
-            <th>Status</th>
             <th>
               <span className={styles.visuallyHidden}>Actions</span>
             </th>
@@ -816,19 +800,9 @@ function RoomTable({ rooms, actionKey, onEnd }: { rooms: AdminRoom[]; actionKey:
                 <span className={styles.typeBadge}>{room.mediaType === "local_file" ? "Local video" : room.mediaType === "youtube" ? "YouTube" : "No media"}</span>
               </td>
               <td>
-                <span className={room.status === "active" ? styles.activeStatus : styles.endedStatus}>
-                  <i />
-                  {room.status}
-                </span>
-              </td>
-              <td>
-                {room.status === "active" ? (
-                  <button className={styles.dangerAction} disabled={Boolean(actionKey)} onClick={() => onEnd(room)} type="button">
-                    {actionKey === `room-end-${room.id}` ? "Ending..." : "End room"}
-                  </button>
-                ) : (
-                  <span className={styles.mutedCell}>—</span>
-                )}
+                <button className={styles.dangerAction} disabled={Boolean(actionKey)} onClick={() => onEnd(room)} type="button">
+                  {actionKey === `room-end-${room.id}` ? "Ending..." : "End room"}
+                </button>
               </td>
             </tr>
           ))}

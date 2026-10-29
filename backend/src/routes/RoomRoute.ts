@@ -138,13 +138,30 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 let roomCode = "";
-                let exists = true;
-                while (exists) {
+                let roomId = 0;
+                const maxAttempts = 10;
+
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                     roomCode = Math.floor(10000000 + Math.random() * 90000000).toString();
-                    exists = await RoomModel.selectRoomExistsByCode(roomCode);
+                    const exists = await RoomModel.selectRoomExistsByCode(roomCode);
+                    if (exists) continue;
+
+                    try {
+                        roomId = await RoomModel.createRoom(roomCode, title, user.id, description, isPrivate, passcodeHash, maxParticipants, mediaType, null);
+                        break;
+                    } catch (insertErr: unknown) {
+                        const isDuplicateKey =
+                            insertErr && typeof insertErr === "object" && ("code" in insertErr ? insertErr.code === "ER_DUP_ENTRY" : String(insertErr).includes("Duplicate entry"));
+                        if (isDuplicateKey && attempt < maxAttempts) {
+                            continue;
+                        }
+                        throw insertErr;
+                    }
                 }
 
-                const roomId = await RoomModel.createRoom(roomCode, title, user.id, description, isPrivate, passcodeHash, maxParticipants, mediaType, null);
+                if (!roomId) {
+                    return c.json({ error: "Failed to generate unique room code. Please try again." }, 500);
+                }
 
                 try {
                     await RoomStateService.addActiveRoom(roomId);

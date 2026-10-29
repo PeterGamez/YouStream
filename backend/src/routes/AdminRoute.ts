@@ -163,6 +163,7 @@ export default class AdminRoute implements RouteInterface {
                 const activeRooms = await RoomModel.selectRoomsByHost(id);
 
                 for (const room of activeRooms) {
+                    RoomSocket.cancelHostDisconnect(room.id);
                     let cleanedUp = false;
                     let lastError: Error | null = null;
                     const maxRetries = 3;
@@ -314,6 +315,34 @@ export default class AdminRoute implements RouteInterface {
                         unlinkSync(media.filePath);
                     } catch {
                         // ignore
+                    }
+                }
+
+                const affectedRooms = await RoomModel.selectRoomsByCurrentMediaId(id);
+                await RoomModel.clearCurrentMedia(id);
+
+                for (const affectedRoom of affectedRooms) {
+                    try {
+                        await RoomStateService.setPlaybackState(affectedRoom.id, {
+                            mediaId: null,
+                            mediaType: "none",
+                            sourceUrl: "",
+                            currentTime: 0,
+                            isPlaying: false,
+                            playbackSpeed: 1,
+                            updatedAt: new Date().toISOString(),
+                        });
+                        const roomKey = RoomStateService.getRoomKey(affectedRoom.id);
+                        SocketService.io?.to(roomKey).emit("video:update", {
+                            sourceType: "none",
+                            mediaId: null,
+                            title: "No video selected",
+                            youtubeId: "",
+                            fileUrl: "",
+                        });
+                    } catch (roomSyncErr) {
+                        const syncMsg = roomSyncErr instanceof Error ? roomSyncErr.message : String(roomSyncErr);
+                        this.server.warn("Admin Route", `Failed to reset room ${affectedRoom.id} after media deletion: ${syncMsg}`);
                     }
                 }
 

@@ -115,7 +115,7 @@ export default class VideoSocket {
                 if (!media) {
                     try {
                         const sourceUrl = `https://www.youtube.com/watch?v=${cleanYoutubeId}`;
-                        const title = data.title?.trim() || "YouTube Video";
+                        const title = (data.title?.trim() || "YouTube Video").slice(0, 250);
                         const mediaId = await MediaModel.createMedia(authCheck.userId, "youtube", title, sourceUrl, cleanYoutubeId, null, null, null, null);
                         media = await MediaModel.selectMedia(mediaId);
                     } catch (createErr) {
