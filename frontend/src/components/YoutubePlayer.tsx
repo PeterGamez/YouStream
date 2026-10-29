@@ -97,16 +97,7 @@ type YoutubePlayerProps = {
   onError: (message: string) => void;
 };
 
-export default function YoutubePlayer({
-  videoId,
-  isHost,
-  currentTime,
-  isPlaying,
-  playbackSpeed,
-  sync,
-  onControl,
-  onError,
-}: YoutubePlayerProps) {
+export default function YoutubePlayer({ videoId, isHost, currentTime, isPlaying, playbackSpeed, sync, onControl, onError }: YoutubePlayerProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YoutubePlayerInstance | null>(null);
   const onControlRef = useRef(onControl);
@@ -218,12 +209,7 @@ export default function YoutubePlayer({
                 const elapsed = (now - previousSample) / 1000;
                 const expectedDelta = elapsed * previousRate;
 
-                if (
-                  isHost &&
-                  Math.abs(nextTime - previousTime) > 0.75 &&
-                  Math.abs(nextTime - previousTime - expectedDelta) > 0.75 &&
-                  now >= suppressEventsUntilRef.current
-                ) {
+                if (isHost && Math.abs(nextTime - previousTime) > 0.75 && Math.abs(nextTime - previousTime - expectedDelta) > 0.75 && now >= suppressEventsUntilRef.current) {
                   onControlRef.current("seek", nextTime, nextRate);
                 }
                 if (isHost && nextRate !== previousRate && now >= suppressEventsUntilRef.current) {
@@ -332,10 +318,7 @@ export default function YoutubePlayer({
   }
 
   return (
-    <div
-      aria-label={isHost ? "YouTube video player" : "Shared YouTube video"}
-      className={`${styles.container} ${isHost ? styles.hostContainer : styles.cleanViewerContainer}`}
-    >
+    <div aria-label={isHost ? "YouTube video player" : "Shared YouTube video"} className={`${styles.container} ${isHost ? styles.hostContainer : styles.cleanViewerContainer}`}>
       <div className={styles.playerWrapper} ref={wrapperRef} />
 
       {!isHost && (
@@ -347,8 +330,7 @@ export default function YoutubePlayer({
                 event.stopPropagation();
                 handleUnmute();
               }}
-              type="button"
-            >
+              type="button">
               <svg fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="15">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />

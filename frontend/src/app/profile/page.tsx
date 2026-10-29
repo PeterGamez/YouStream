@@ -112,10 +112,7 @@ export default function ProfilePage() {
   }
 
   const activeAvatarSrc = avatarUrl.trim() || profile?.avatarUrl;
-  const isUnchanged =
-    profile !== null &&
-    displayName.trim() === profile.displayName &&
-    avatarUrl.trim() === (profile.avatarUrl || "").trim();
+  const isUnchanged = profile !== null && displayName.trim() === profile.displayName && avatarUrl.trim() === (profile.avatarUrl || "").trim();
 
   return (
     <div className={styles.page}>
@@ -138,12 +135,7 @@ export default function ProfilePage() {
               <div className={styles.accountDetails}>
                 <div className={styles.avatarWrapper}>
                   {activeAvatarSrc && !avatarImgFailed ? (
-                    <img
-                      alt={displayName || profile.displayName}
-                      className={styles.avatarImage}
-                      onError={() => setAvatarImgFailed(true)}
-                      src={activeAvatarSrc}
-                    />
+                    <img alt={displayName || profile.displayName} className={styles.avatarImage} onError={() => setAvatarImgFailed(true)} src={activeAvatarSrc} />
                   ) : (
                     <div className={styles.avatarFallback} aria-hidden="true">
                       {(displayName || profile.displayName || "?").slice(0, 1).toUpperCase()}
@@ -158,14 +150,7 @@ export default function ProfilePage() {
 
               <form className={styles.form} onSubmit={saveProfile}>
                 <label htmlFor="profile-display-name">Display name</label>
-                <input
-                  autoComplete="name"
-                  id="profile-display-name"
-                  maxLength={100}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  required
-                  value={displayName}
-                />
+                <input autoComplete="name" id="profile-display-name" maxLength={100} onChange={(event) => setDisplayName(event.target.value)} required value={displayName} />
 
                 <label htmlFor="profile-avatar-url">Profile picture URL (Avatar)</label>
                 <input
@@ -180,9 +165,7 @@ export default function ProfilePage() {
                   type="url"
                   value={avatarUrl}
                 />
-                <span className={styles.inputHelp}>
-                  Enter a direct image link (JPG, PNG, WebP) or leave empty for default Gravatar.
-                </span>
+                <span className={styles.inputHelp}>Enter a direct image link (JPG, PNG, WebP) or leave empty for default Gravatar.</span>
 
                 <label htmlFor="profile-email">Email address</label>
                 <input id="profile-email" readOnly value={profile.email} />

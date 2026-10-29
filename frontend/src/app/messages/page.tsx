@@ -4,11 +4,12 @@ import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { type Socket, io } from "socket.io-client";
 
+import config from "@/config";
+
 import SiteHeader from "../../components/SiteHeader";
 import { type Room, listActiveRooms } from "../../features/rooms/api";
 import { ApiError, clearTokens, getAccessToken, hasSession } from "../../lib/api";
 import styles from "./page.module.css";
-import config from "@/config";
 
 type ChatMessage = {
   id: string;

@@ -5,10 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { type Socket, io } from "socket.io-client";
 
+import config from "@/config";
+
 import YoutubePlayer from "../../../components/YoutubePlayer";
 import { ApiError, apiRequest, clearTokens, getAccessToken } from "../../../lib/api";
 import styles from "./page.module.css";
-import config from "@/config";
 
 type Room = {
   id: number;
@@ -235,16 +236,10 @@ export default function RoomPage() {
           if (sync.action === "pause") video.pause();
         });
         activeSocket.on("room:host-disconnected", (data: { message?: string; gracePeriodSeconds?: number }) => {
-          setMessages((current) => [
-            ...current,
-            createSystemMessage(data?.message || "The host has disconnected. Room will close soon if the host does not reconnect."),
-          ].slice(-100));
+          setMessages((current) => [...current, createSystemMessage(data?.message || "The host has disconnected. Room will close soon if the host does not reconnect.")].slice(-100));
         });
         activeSocket.on("room:host-reconnected", (data: { message?: string }) => {
-          setMessages((current) => [
-            ...current,
-            createSystemMessage(data?.message || "The host has reconnected to the room."),
-          ].slice(-100));
+          setMessages((current) => [...current, createSystemMessage(data?.message || "The host has reconnected to the room.")].slice(-100));
         });
         activeSocket.on("room:ended", (data: { roomId: number; reason?: string }) => {
           setStatus("Room closed");
@@ -405,8 +400,7 @@ export default function RoomPage() {
               event.preventDefault();
               handleLeaveRoom();
             }
-          }}
-        >
+          }}>
           <span className={styles.brandMark}>y</span> YouStream
         </Link>
         <button className={styles.leaveRoomLink} onClick={handleLeaveRoom} type="button">
@@ -471,12 +465,7 @@ export default function RoomPage() {
               <button aria-pressed={mediaMode === "upload"} onClick={() => setMediaMode("upload")} type="button">
                 Upload
               </button>
-              <button
-                className={styles.closeRoomButton}
-                onClick={handleLeaveRoom}
-                title="Leave and delete this room"
-                type="button"
-              >
+              <button className={styles.closeRoomButton} onClick={handleLeaveRoom} title="Leave and delete this room" type="button">
                 Delete & Exit
               </button>
             </div>
@@ -612,15 +601,7 @@ export default function RoomPage() {
             <h2 id="passcode-title">Join {room?.title ?? "this room"}</h2>
             <p>Enter the passcode shared by the host to enter the room.</p>
             <label htmlFor="room-passcode">Passcode</label>
-            <input
-              autoFocus
-              id="room-passcode"
-              minLength={4}
-              onChange={(event) => setRoomPasscode(event.target.value)}
-              required
-              type="password"
-              value={roomPasscode}
-            />
+            <input autoFocus id="room-passcode" minLength={4} onChange={(event) => setRoomPasscode(event.target.value)} required type="password" value={roomPasscode} />
             {passcodeError && <p className={styles.passcodeError}>{passcodeError}</p>}
             <div className={styles.passcodeActions}>
               <Link href="/">Cancel</Link>

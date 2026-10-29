@@ -283,7 +283,7 @@ export default function Home() {
                         {room.isPrivate ? " · Private" : ""}
                       </p>
                     </div>
-                    <Link aria-label={`Join ${room.title}`} className={styles.joinButton} href={`/room/${room.roomCode}`} >
+                    <Link aria-label={`Join ${room.title}`} className={styles.joinButton} href={`/room/${room.roomCode}`}>
                       <span aria-hidden="true">&rarr;</span>
                     </Link>
                   </div>
