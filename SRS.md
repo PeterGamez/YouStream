@@ -407,7 +407,7 @@ erDiagram
 #### 3.1 สรุปรูปแบบ Key และชนิดข้อมูลบน Redis (Redis Key Summary)
 | รูปแบบ Key (Key Pattern) | ชนิดข้อมูล (Data Type) | คำสั่งหลัก (Commands) | วัตถุประสงค์และการทำงาน | นโยบายการหมดอายุ (TTL / Expiration) |
 | :--- | :--- | :--- | :--- | :--- |
-| `room:{roomId}:playback` | **Hash** | `HSET`, `HGETALL`, `HMSET`, `EXPIRE` | ซิงค์สถานะการเล่นวิดีโอปัจจุบัน (เวลา, เล่น/หยุด, ความเร็ว, เสียง) ส่งให้ผู้ชมทุกคนและ Late-joiner | ลบเมื่อปิดห้อง (`status = 'ended'`) หรือตั้ง TTL 24 ชม. |
+| `room:{roomId}:playback` | **Hash** | `HSET`, `HGETALL`, `HMSET`, `EXPIRE` | ซิงค์สถานะการเล่นวิดีโอปัจจุบัน (เวลา, เล่น/หยุด, ความเร็ว, เสียง) ส่งให้ผู้ชมทุกคนและ Late-joiner | ลบเมื่อปิดห้อง หรือตั้ง TTL 24 ชม. |
 | `room:{roomId}:participants` | **Hash** | `HSET`, `HDEL`, `HGETALL`, `HVALS`, `HLEN` | บันทึกรายชื่อและสถานะของผู้ใช้ที่กำลังออนไลน์ในห้องแบบเรียลไทม์ (Field: `user:{userId}`) | ลบ Field เมื่อผู้ใช้ออกจากห้อง (`HDEL`) หรือลบ Key เมื่อปิดห้อง |
 | `room:{roomId}:messages` | **List** | `RPUSH`, `LTRIM`, `LRANGE` | จัดเก็บประวัติข้อความแชทล่าสุดในห้องแบบ Capped List (จำกัด 100 ข้อความล่าสุด) | ลบเมื่อปิดห้อง หรือตั้ง TTL 24 ชม. |
 | `socket:{socketId}:session` | **Hash** | `HSET`, `HGETALL`, `DEL` | แมป Socket ID กลับไปยัง `userId` และ `roomId` สำหรับจัดการ Disconnect แบบ $O(1)$ | ลบทันทีเมื่อ Socket Disconnect |
