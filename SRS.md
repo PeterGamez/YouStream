@@ -30,8 +30,8 @@
 ## 🔗 ลิงก์ที่เกี่ยวข้อง (Important Deliverables Links)
 - **Production URL (Deployed App):** [YouStream](https://youstream.alltime.in.th)
 - **GitHub Repository:** [Github](https://github.com/PeterGamez/YouStream)
-- **Figma Prototype:** [Figma](https://www.figma.com/design/m3WwqivIb8txZGfrrGvg5h/YouStream)
-- **Video Presentation & Demo:** [แนบลิงก์คลิป Unlisted เช่น YouTube / Google Drive]
+- **Figma Prototype:** [Figma](https://figma.com/design/m3WwqivIb8txZGfrrGvg5h/YouStream)
+- **Video Presentation & Demo:** [YouTube](https://youtube.com/)
 
 ### 🔑 บัญชีสำหรับทดสอบระบบ (Test Accounts)
 | บทบาท (Role) | อีเมล / Username | รหัสผ่าน (Password) | สิทธิ์การเข้าถึง (Permissions) |
