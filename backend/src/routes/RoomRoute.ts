@@ -391,8 +391,6 @@ export default class RoomRoute implements RouteInterface {
                     maxParticipants?: number;
                     isPrivate?: boolean;
                     passcode?: string;
-                    roomCode?: string;
-                    code?: string;
                 };
                 try {
                     body = await c.req.json();
@@ -416,23 +414,6 @@ export default class RoomRoute implements RouteInterface {
 
                 if (body.maxParticipants !== undefined) {
                     fieldsToUpdate.maxParticipants = body.maxParticipants;
-                }
-
-                if (body.roomCode !== undefined || body.code !== undefined) {
-                    const newCode = (body.roomCode || body.code)?.trim();
-                    if (!newCode || !Number(newCode)) {
-                        return c.json({ error: "Invalid room code" }, 400);
-                    }
-                    if (newCode.length > 8) {
-                        return c.json({ error: "Room code cannot exceed 8 characters" }, 400);
-                    }
-                    if (newCode !== room.roomCode) {
-                        const exists = await RoomModel.selectRoomExistsByCode(newCode);
-                        if (exists) {
-                            return c.json({ error: "Room code already exists" }, 409);
-                        }
-                        fieldsToUpdate.roomCode = newCode;
-                    }
                 }
 
                 if (body.isPrivate !== undefined) {
