@@ -40,10 +40,7 @@ export default class RoomSocket {
         const roomKey = RoomStateService.getRoomKey(roomId);
         const timeoutSeconds = Math.round(this.HOST_GRACE_PERIOD_MS / 1000);
 
-        this.server.log(
-            "Socket:Room",
-            `Host ${hostId} left/disconnected from room ${roomId}. Room deletion scheduled in ${timeoutSeconds}s (grace period).`
-        );
+        this.server.log("Socket:Room", `Host ${hostId} left/disconnected from room ${roomId}. Room deletion scheduled in ${timeoutSeconds}s (grace period).`);
 
         this.io.to(roomKey).emit("room:host-disconnected", {
             roomId,
@@ -92,10 +89,7 @@ export default class RoomSocket {
                     this.server.warn("Socket:Room", `Redis cleanup error after grace period for room ${roomId}: ${redisMsg}`);
                 }
 
-                this.server.log(
-                    "Socket:Room",
-                    `Host ${hostId} did not return within ${timeoutSeconds}s. Room ${roomId} deleted from database.`
-                );
+                this.server.log("Socket:Room", `Host ${hostId} did not return within ${timeoutSeconds}s. Room ${roomId} deleted from database.`);
                 RoomSocket.endRoom(roomId, defaultReason || "Room has been closed because the host did not reconnect in time");
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
@@ -485,11 +479,7 @@ export default class RoomSocket {
 
                         const room = await RoomModel.selectRoom(session.roomId);
                         if (room && room.hostId === session.userId) {
-                            RoomSocket.scheduleHostDisconnect(
-                                session.roomId,
-                                session.userId,
-                                "Room has been closed because the host disconnected"
-                            );
+                            RoomSocket.scheduleHostDisconnect(session.roomId, session.userId, "Room has been closed because the host disconnected");
                         }
                     }
                 }

@@ -239,7 +239,7 @@ export default class AdminRoute implements RouteInterface {
 
         this.app.post("/rooms/:code/end", async (c) => {
             try {
-                const code = c.req.param("code")
+                const code = c.req.param("code");
                 if (!Number(code)) {
                     return c.json({ error: "Room code must be a number" }, 400);
                 }
