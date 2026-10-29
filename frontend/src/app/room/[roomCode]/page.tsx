@@ -234,6 +234,18 @@ export default function RoomPage() {
           if (sync.action === "play") void video.play().catch(() => {});
           if (sync.action === "pause") video.pause();
         });
+        activeSocket.on("room:host-disconnected", (data: { message?: string; gracePeriodSeconds?: number }) => {
+          setMessages((current) => [
+            ...current,
+            createSystemMessage(data?.message || "The host has disconnected. Room will close soon if the host does not reconnect."),
+          ].slice(-100));
+        });
+        activeSocket.on("room:host-reconnected", (data: { message?: string }) => {
+          setMessages((current) => [
+            ...current,
+            createSystemMessage(data?.message || "The host has reconnected to the room."),
+          ].slice(-100));
+        });
         activeSocket.on("room:ended", (data: { roomId: number; reason?: string }) => {
           setStatus("Room closed");
           setError(data?.reason || "The host has left and closed this room.");
