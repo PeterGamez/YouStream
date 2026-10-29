@@ -34,7 +34,6 @@ CREATE TABLE IF NOT EXISTS `room` (
     `title` VARCHAR(150) NOT NULL,
     `description` TEXT NULL DEFAULT NULL,
     `host_id` INT NOT NULL,
-    `status` ENUM('active') NOT NULL DEFAULT 'active',
     `media_type` ENUM('none', 'youtube', 'local_file') NOT NULL DEFAULT 'none',
     `current_media_id` INT NULL DEFAULT NULL,
     `is_private` TINYINT(1) NOT NULL DEFAULT 0,

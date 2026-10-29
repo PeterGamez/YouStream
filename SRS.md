@@ -369,7 +369,6 @@ erDiagram
 | `title` | `VARCHAR(150)` | NO | - | ชื่อห้องสตรีมมิ่งที่แสดงใน Room Directory |
 | `description` | `TEXT` | YES | NULL | คำอธิบายรายละเอียดเกี่ยวกับห้องหรือวิดีโอ |
 | `host_id` | `INT` | NO | - | ผู้สร้างห้องที่มีสิทธิ์ Host Control |
-| `status` | `ENUM('active')` | NO | DEFAULT `'active'` | สถานะของห้อง (กำลังเปิดใช้งานอยู่) |
 | `media_type` | `ENUM('none', 'youtube', 'local_file')` | NO | DEFAULT `'none'` | ชนิดของสื่อที่กำลังสตรีมอยู่ขณะนี้ |
 | `current_media_id` | `INT` | YES | NULL | อ้างอิงวิดีโอปัจจุบันที่กำลังเล่น |
 | `is_private` | `BOOLEAN` | NO | DEFAULT `FALSE` | ห้องส่วนตัว (ต้องใส่รหัสผ่านก่อนเข้า) |
