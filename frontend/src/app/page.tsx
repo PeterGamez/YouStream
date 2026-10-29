@@ -18,14 +18,15 @@ const categories = [
 
 type RoomFilter = (typeof categories)[number]["id"];
 const roomPosters: Record<RoomMediaType, string[]> = {
-  none: ["/images/room-custom.jpg", "/images/room-music.jpg"],
-  youtube: ["/images/room-series.jpg", "/images/room-music.jpg"],
+  none: ["/images/room-custom.png", "/images/room-music.png"],
+  youtube: ["/images/room-series.jpg", "/images/room-music.png"],
   local_file: ["/images/room-film.jpg", "/images/room-series.jpg"],
 };
 
 function getRoomPoster(room: Room) {
-  const posters = roomPosters[room.mediaType];
-  return posters[room.id % posters.length];
+  const posters = (room?.mediaType && roomPosters[room.mediaType]) || roomPosters.none;
+  const index = Math.abs(Number(room?.id) || 0) % posters.length;
+  return posters[index];
 }
 
 const mediaLabels: Record<RoomMediaType, string> = {
@@ -118,7 +119,8 @@ export default function Home() {
 
   const filteredRooms = rooms.filter((room) => {
     const matchesCategory = activeCategory === "all" || room.mediaType === activeCategory;
-    const matchesSearch = `${room.title} ${room.host?.displayName ?? ""} ${room.roomCode}`.toLowerCase().includes(search.trim().toLowerCase());
+    const normalizedSearch = search.trim().toLowerCase();
+    const matchesSearch = [room.title, room.roomCode, room.host?.displayName].filter(Boolean).some((value) => (value || "").toLowerCase().includes(normalizedSearch));
 
     return matchesCategory && matchesSearch;
   });
@@ -156,7 +158,7 @@ export default function Home() {
       setIsCreateOpen(false);
       setRoomTitle("");
       setRoomPasscode("");
-      router.push(`/room/${room.id}`);
+      router.push(`/room/${room.roomCode}`);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         clearTokens();
@@ -281,7 +283,7 @@ export default function Home() {
                         {room.isPrivate ? " · Private" : ""}
                       </p>
                     </div>
-                    <Link aria-label={`Join ${room.title}`} className={styles.joinButton} href={`/room/${room.id}`}>
+                    <Link aria-label={`Join ${room.title}`} className={styles.joinButton} href={`/room/${room.roomCode}`} >
                       <span aria-hidden="true">&rarr;</span>
                     </Link>
                   </div>
@@ -353,7 +355,7 @@ export default function Home() {
                 id="room-title"
                 maxLength={80}
                 onChange={(event) => setRoomTitle(event.target.value)}
-                placeholder="Friday night films"
+                placeholder="Type a name for your room"
                 required
                 value={roomTitle}
               />

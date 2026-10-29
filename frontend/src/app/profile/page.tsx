@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import SiteHeader from "../../components/SiteHeader";
-import { PROFILE_CHANGE_EVENT, apiRequest, clearTokens, getAccessToken, hasSession } from "../../lib/api";
+import { ApiError, PROFILE_CHANGE_EVENT, apiRequest, clearTokens, getAccessToken, hasSession } from "../../lib/api";
 import styles from "./page.module.css";
 
 type UserProfile = {
@@ -46,6 +46,11 @@ export default function ProfilePage() {
         setStatus("ready");
       } catch (loadError) {
         if (!isCurrent) return;
+        if (loadError instanceof ApiError && (loadError.status === 401 || loadError.status === 404)) {
+          clearTokens();
+          router.replace("/login");
+          return;
+        }
         if (!getAccessToken()) {
           router.replace("/login");
           return;

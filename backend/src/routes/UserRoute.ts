@@ -26,7 +26,7 @@ export default class UserRoute implements RouteInterface {
             try {
                 const user = await this.server.Middleware.getUser(c);
                 if (!user) {
-                    return c.json({ error: "User not found" }, 404);
+                    return c.json({ error: "User not found" }, 401);
                 }
 
                 const userDTO: UserSafeDTO = {
@@ -50,7 +50,7 @@ export default class UserRoute implements RouteInterface {
             try {
                 const user = await this.server.Middleware.getUser(c);
                 if (!user) {
-                    return c.json({ error: "User not found" }, 404);
+                    return c.json({ error: "User not found" }, 401);
                 }
 
                 let body: { displayName?: string; avatarUrl?: string };
@@ -97,7 +97,7 @@ export default class UserRoute implements RouteInterface {
             try {
                 const me = await this.server.Middleware.getUser(c);
                 if (!me) {
-                    return c.json({ error: "User not found" }, 404);
+                    return c.json({ error: "User not found" }, 401);
                 }
 
                 let body: { currentPassword?: string; oldPassword?: string; newPassword?: string };
@@ -116,7 +116,7 @@ export default class UserRoute implements RouteInterface {
 
                 const user = await UserModel.selectUser(me.id);
                 if (!user) {
-                    return c.json({ error: "User not found" }, 404);
+                    return c.json({ error: "User not found" }, 401);
                 }
 
                 const isValidPassword = await this.server.Password.verify(currentPassword, user.password);

@@ -12,9 +12,111 @@ export default class RoomSocket {
     private static io: IOServer;
     private static server: Server;
 
+    /**
+     * Grace period in milliseconds before deleting a room after the host leaves or disconnects.
+     * Default: 60 seconds (60,000 ms).
+     */
+    public static readonly HOST_GRACE_PERIOD_MS = 60 * 1000;
+
+    /**
+     * Pending deletion timers for rooms whose host has disconnected.
+     * Key: roomId, Value: NodeJS.Timeout
+     */
+    private static hostDisconnectTimers = new Map<number, NodeJS.Timeout>();
+
     public static init(io: IOServer, server: Server): void {
         this.io = io;
         this.server = server;
+    }
+
+    /**
+     * Schedules delayed room deletion when the host disconnects or leaves.
+     */
+    public static scheduleHostDisconnect(roomId: number, hostId: number, defaultReason: string): void {
+        if (this.hostDisconnectTimers.has(roomId)) {
+            return;
+        }
+
+        const roomKey = RoomStateService.getRoomKey(roomId);
+        const timeoutSeconds = Math.round(this.HOST_GRACE_PERIOD_MS / 1000);
+
+        this.server.log(
+            "Socket:Room",
+            `Host ${hostId} left/disconnected from room ${roomId}. Room deletion scheduled in ${timeoutSeconds}s (grace period).`
+        );
+
+        this.io.to(roomKey).emit("room:host-disconnected", {
+            roomId,
+            hostId,
+            gracePeriodMs: this.HOST_GRACE_PERIOD_MS,
+            gracePeriodSeconds: timeoutSeconds,
+            message: `Host has disconnected. The room will close in ${timeoutSeconds} seconds if the host does not reconnect.`,
+        });
+
+        const timer = setTimeout(async () => {
+            this.hostDisconnectTimers.delete(roomId);
+
+            try {
+                // Re-verify if host has reconnected in the meantime
+                const socketsInRoom = await this.io.in(roomKey).fetchSockets();
+                const hostSocket = socketsInRoom.find((s) => (s.data?.userId || s.data?.user?.id) === hostId);
+                if (hostSocket) {
+                    this.server.log("Socket:Room", `Room ${roomId} deletion aborted: host ${hostId} is present.`);
+                    return;
+                }
+
+                // Check if the host participant exists in Redis
+                const hostParticipant = await RoomStateService.getParticipant(roomId, hostId);
+                if (hostParticipant) {
+                    this.server.log("Socket:Room", `Room ${roomId} deletion aborted: host participant found in Redis.`);
+                    return;
+                }
+
+                // Double check if room still exists in DB
+                const room = await RoomModel.selectRoom(roomId);
+                if (!room) {
+                    return;
+                }
+
+                try {
+                    await RoomModel.deleteRoom(roomId);
+                } catch (dbErr) {
+                    const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+                    this.server.error("Socket:Room", `Failed to delete room ${roomId} after grace period: ${dbMsg}`);
+                }
+
+                try {
+                    await RoomStateService.cleanupRoom(roomId);
+                } catch (redisErr) {
+                    const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+                    this.server.warn("Socket:Room", `Redis cleanup error after grace period for room ${roomId}: ${redisMsg}`);
+                }
+
+                this.server.log(
+                    "Socket:Room",
+                    `Host ${hostId} did not return within ${timeoutSeconds}s. Room ${roomId} deleted from database.`
+                );
+                RoomSocket.endRoom(roomId, defaultReason || "Room has been closed because the host did not reconnect in time");
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                this.server.error("Socket:Room", `Error during delayed room deletion for room ${roomId}: ${msg}`);
+            }
+        }, this.HOST_GRACE_PERIOD_MS);
+
+        this.hostDisconnectTimers.set(roomId, timer);
+    }
+
+    /**
+     * Cancels a pending room deletion timer if the host reconnects.
+     */
+    public static cancelHostDisconnect(roomId: number): boolean {
+        const timer = this.hostDisconnectTimers.get(roomId);
+        if (timer) {
+            clearTimeout(timer);
+            this.hostDisconnectTimers.delete(roomId);
+            return true;
+        }
+        return false;
     }
 
     public static register(socket: Socket): void {
@@ -147,6 +249,18 @@ export default class RoomSocket {
 
             this.server.log("Socket:Room", `Client ${socket.id} (user ${userId}, role: ${role}) joined ${roomKey}`);
 
+            if (room.hostId === userId) {
+                const wasCancelled = RoomSocket.cancelHostDisconnect(roomId);
+                if (wasCancelled) {
+                    this.server.log("Socket:Room", `Host ${userId} rejoined room ${roomId}. Grace period cancelled.`);
+                    this.io.to(roomKey).emit("room:host-reconnected", {
+                        roomId,
+                        hostId: userId,
+                        message: "Host has reconnected to the room.",
+                    });
+                }
+            }
+
             const recentMessages = await RoomStateService.getMessages(roomId, 100);
             const participants = await RoomStateService.getParticipants(roomId);
             const playbackState = await RoomStateService.getPlaybackState(roomId);
@@ -221,31 +335,15 @@ export default class RoomSocket {
                     } else {
                         await RoomStateService.removeParticipant(roomId, userId);
 
-                        const room = await RoomModel.selectRoom(roomId);
-                        if (room && room.hostId === userId) {
-                            try {
-                                await RoomModel.deleteRoom(roomId);
-                            } catch (dbErr) {
-                                const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
-                                this.server.error("Socket:Room", `Failed to delete room ${roomId} on host leave: ${dbMsg}`);
-                            }
-
-                            try {
-                                await RoomStateService.cleanupRoom(roomId);
-                            } catch (redisErr) {
-                                const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
-                                this.server.warn("Socket:Room", `Redis cleanup error on host leave: ${redisMsg}`);
-                            }
-
-                            this.server.log("Socket:Room", `Host ${userId} left. Room ${roomId} deleted from database.`);
-                            RoomSocket.endRoom(roomId, "Room has been closed because the host left");
-                            return;
-                        }
-
                         this.io.to(roomKey).emit("room:user-left", {
                             userId: userId,
                             displayName: participant.displayName || socket.data?.user?.displayName || "",
                         });
+
+                        const room = await RoomModel.selectRoom(roomId);
+                        if (room && room.hostId === userId) {
+                            RoomSocket.scheduleHostDisconnect(roomId, userId, "Room has been closed because the host left");
+                        }
                     }
                 }
             }
@@ -335,6 +433,8 @@ export default class RoomSocket {
                 return;
             }
 
+            RoomSocket.cancelHostDisconnect(roomId);
+
             try {
                 await RoomModel.deleteRoom(roomId);
             } catch (dbErr) {
@@ -378,32 +478,19 @@ export default class RoomSocket {
                     } else {
                         await RoomStateService.removeParticipant(session.roomId, session.userId);
 
-                        const room = await RoomModel.selectRoom(session.roomId);
-                        if (room && room.hostId === session.userId) {
-                            try {
-                                await RoomModel.deleteRoom(session.roomId);
-                            } catch (dbErr) {
-                                const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr);
-                                this.server.error("Socket:Room", `Failed to delete room ${session.roomId} on host disconnect: ${dbMsg}`);
-                            }
-
-                            try {
-                                await RoomStateService.cleanupRoom(session.roomId);
-                            } catch (redisErr) {
-                                const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
-                                this.server.warn("Socket:Room", `Redis cleanup error on host disconnect: ${redisMsg}`);
-                            }
-
-                            this.server.log("Socket:Room", `Host ${session.userId} disconnected. Room ${session.roomId} deleted from database.`);
-                            RoomSocket.endRoom(session.roomId, "Room has been closed because the host disconnected");
-                            await RoomStateService.delSocketSession(socket.id);
-                            return;
-                        }
-
                         this.io.to(roomKey).emit("room:user-left", {
                             userId: session.userId,
                             displayName: participant.displayName || socket.data?.user?.displayName || "",
                         });
+
+                        const room = await RoomModel.selectRoom(session.roomId);
+                        if (room && room.hostId === session.userId) {
+                            RoomSocket.scheduleHostDisconnect(
+                                session.roomId,
+                                session.userId,
+                                "Room has been closed because the host disconnected"
+                            );
+                        }
                     }
                 }
             }
