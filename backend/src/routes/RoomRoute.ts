@@ -381,7 +381,7 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Room not found" }, 404);
                 }
 
-                if (room.hostId !== user.id && user.role !== "admin") {
+                if (room.hostId !== user.id) {
                     return c.json({ error: "Forbidden: Only the room host can update room details" }, 403);
                 }
 
@@ -511,7 +511,7 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Room not found" }, 404);
                 }
 
-                if (room.hostId !== user.id && user.role !== "admin") {
+                if (room.hostId !== user.id) {
                     return c.json({ error: "Forbidden: Only the room host can end the room" }, 403);
                 }
 
