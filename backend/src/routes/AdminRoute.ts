@@ -241,7 +241,7 @@ export default class AdminRoute implements RouteInterface {
             try {
                 const code = c.req.param("code")
                 if (!Number(code)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
                 const room = await RoomModel.selectRoomByCode(code);

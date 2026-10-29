@@ -195,11 +195,75 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
+        this.app.get("/:code", async (c) => {
+            try {
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
+                }
+
+                const room = await RoomModel.selectRoomByCode(code);
+                if (!room) {
+                    return c.json({ error: "Room not found" }, 404);
+                }
+
+                let host = undefined;
+                try {
+                    const hostUser = await UserModel.selectUser(room.hostId);
+                    if (hostUser) {
+                        host = {
+                            id: hostUser.id,
+                            displayName: hostUser.displayName,
+                            avatarUrl: hostUser.avatarUrl,
+                        };
+                    }
+                } catch {
+                    // ignore
+                }
+
+                let participantCount = 0;
+                try {
+                    participantCount = await RoomStateService.getParticipantCount(room.id);
+                } catch {
+                    // ignore
+                }
+
+                const effectiveMedia = await RoomReconciliationService.getEffectiveRoomMedia(room.id, {
+                    mediaType: room.mediaType,
+                    currentMediaId: room.currentMediaId,
+                });
+
+                const safeRoom: RoomSafeDTO & { host?: typeof host; participantCount: number } = {
+                    id: room.id,
+                    roomCode: room.roomCode,
+                    title: room.title,
+                    description: room.description,
+                    hostId: room.hostId,
+                    host,
+                    status: room.status,
+                    mediaType: effectiveMedia.mediaType,
+                    currentMediaId: effectiveMedia.currentMediaId,
+                    isPrivate: room.isPrivate,
+                    participantCount,
+                    maxParticipants: room.maxParticipants,
+                    createdAt: room.createdAt,
+                    updatedAt: room.updatedAt,
+                    endedAt: room.endedAt,
+                };
+
+                return c.json({ room: safeRoom });
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get /rooms/:code error: ${message}`);
+                return c.json({ error: "Failed to retrieve room" }, 500);
+            }
+        });
+
         this.app.get("/code/:code", async (c) => {
             try {
-                const code = c.req.param("code")?.trim();
-                if (!code) {
-                    return c.json({ error: "Room code is required" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
                 const room = await RoomModel.selectRoomByCode(code);
@@ -259,84 +323,20 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.get("/:id", async (c) => {
+        this.app.post("/:code/verify-passcode", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                const room = await RoomModel.selectRoom(id);
-                if (!room) {
-                    return c.json({ error: "Room not found" }, 404);
-                }
-
-                let host = undefined;
-                try {
-                    const hostUser = await UserModel.selectUser(room.hostId);
-                    if (hostUser) {
-                        host = {
-                            id: hostUser.id,
-                            displayName: hostUser.displayName,
-                            avatarUrl: hostUser.avatarUrl,
-                        };
-                    }
-                } catch {
-                    // ignore
-                }
-
-                let participantCount = 0;
-                try {
-                    participantCount = await RoomStateService.getParticipantCount(room.id);
-                } catch {
-                    // ignore
-                }
-
-                const effectiveMedia = await RoomReconciliationService.getEffectiveRoomMedia(room.id, {
-                    mediaType: room.mediaType,
-                    currentMediaId: room.currentMediaId,
-                });
-
-                const safeRoom: RoomSafeDTO & { host?: typeof host; participantCount: number } = {
-                    id: room.id,
-                    roomCode: room.roomCode,
-                    title: room.title,
-                    description: room.description,
-                    hostId: room.hostId,
-                    host,
-                    status: room.status,
-                    mediaType: effectiveMedia.mediaType,
-                    currentMediaId: effectiveMedia.currentMediaId,
-                    isPrivate: room.isPrivate,
-                    participantCount,
-                    maxParticipants: room.maxParticipants,
-                    createdAt: room.createdAt,
-                    updatedAt: room.updatedAt,
-                    endedAt: room.endedAt,
-                };
-
-                return c.json({ room: safeRoom });
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                this.server.error("Room Route", `Get /rooms/:id error: ${message}`);
-                return c.json({ error: "Failed to retrieve room" }, 500);
-            }
-        });
-
-        this.app.post("/:id/verify-passcode", async (c) => {
-            try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
-                }
-
-                const room = await RoomModel.selectRoom(id);
+                const room = await RoomModel.selectRoomByCode(code);
                 if (!room) {
                     return c.json({ error: "Room not found" }, 404);
                 }
 
                 if (!room.isPrivate || !room.passcode) {
-                    return c.json({ verified: true, roomId: room.id });
+                    return c.json({ verified: true, roomId: room.id, roomCode: room.roomCode });
                 }
 
                 let body: { passcode?: string };
@@ -356,7 +356,7 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Invalid passcode", verified: false }, 401);
                 }
 
-                return c.json({ verified: true, roomId: room.id });
+                return c.json({ verified: true, roomId: room.id, roomCode: room.roomCode });
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 this.server.error("Room Route", `Verify passcode error: ${message}`);
@@ -364,11 +364,11 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.patch("/:id", async (c) => {
+        this.app.patch("/:code", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
                 const user = await this.server.Middleware.getUser(c);
@@ -376,7 +376,7 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Unauthorized" }, 401);
                 }
 
-                const room = await RoomModel.selectRoom(id);
+                const room = await RoomModel.selectRoomByCode(code);
                 if (!room) {
                     return c.json({ error: "Room not found" }, 404);
                 }
@@ -391,6 +391,8 @@ export default class RoomRoute implements RouteInterface {
                     maxParticipants?: number;
                     isPrivate?: boolean;
                     passcode?: string;
+                    roomCode?: string;
+                    code?: string;
                 };
                 try {
                     body = await c.req.json();
@@ -414,6 +416,23 @@ export default class RoomRoute implements RouteInterface {
 
                 if (body.maxParticipants !== undefined) {
                     fieldsToUpdate.maxParticipants = body.maxParticipants;
+                }
+
+                if (body.roomCode !== undefined || body.code !== undefined) {
+                    const newCode = (body.roomCode || body.code)?.trim();
+                    if (!newCode || !Number(newCode)) {
+                        return c.json({ error: "Invalid room code" }, 400);
+                    }
+                    if (newCode.length > 8) {
+                        return c.json({ error: "Room code cannot exceed 8 characters" }, 400);
+                    }
+                    if (newCode !== room.roomCode) {
+                        const exists = await RoomModel.selectRoomExistsByCode(newCode);
+                        if (exists) {
+                            return c.json({ error: "Room code already exists" }, 409);
+                        }
+                        fieldsToUpdate.roomCode = newCode;
+                    }
                 }
 
                 if (body.isPrivate !== undefined) {
@@ -444,10 +463,10 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 if (Object.keys(fieldsToUpdate).length > 0) {
-                    await RoomModel.updateRoomFields(id, fieldsToUpdate);
+                    await RoomModel.updateRoomFields(room.id, fieldsToUpdate);
                 }
 
-                const updatedRoom = await RoomModel.selectRoom(id);
+                const updatedRoom = await RoomModel.selectRoom(room.id);
                 const safeRoom: RoomSafeDTO = {
                     id: updatedRoom.id,
                     roomCode: updatedRoom.roomCode,
@@ -475,11 +494,11 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.post("/:id/end", async (c) => {
+        this.app.post("/:code/end", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
                 const user = await this.server.Middleware.getUser(c);
@@ -487,7 +506,7 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Unauthorized" }, 401);
                 }
 
-                const room = await RoomModel.selectRoom(id);
+                const room = await RoomModel.selectRoomByCode(code);
                 if (!room) {
                     return c.json({ error: "Room not found" }, 404);
                 }
@@ -496,27 +515,30 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Forbidden: Only the room host can end the room" }, 403);
                 }
 
-                await RoomModel.deleteRoom(id);
+                RoomSocket.cancelHostDisconnect(room.id);
+
+                await RoomModel.deleteRoom(room.id);
 
                 try {
-                    await RoomStateService.cleanupRoom(id);
+                    await RoomStateService.cleanupRoom(room.id);
                 } catch (redisErr) {
                     const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
-                    this.server.warn("Room Route", `Redis cleanup error for room ${id}: ${redisMsg}`);
+                    this.server.warn("Room Route", `Redis cleanup error for room ${room.id}: ${redisMsg}`);
                 }
 
                 try {
-                    RoomSocket.endRoom(id, "Room has been closed by the host");
+                    RoomSocket.endRoom(room.id, "Room has been closed by the host");
                 } catch (socketErr) {
                     const socketMsg = socketErr instanceof Error ? socketErr.message : String(socketErr);
                     this.server.warn("Room Route", `Socket endRoom emit error: ${socketMsg}`);
                 }
 
-                this.server.log("Room Route", `Room ${id} deleted by user ${user.id}`);
+                this.server.log("Room Route", `Room ${room.id} (${room.roomCode}) deleted by user ${user.id}`);
 
                 return c.json({
                     message: "Room deleted successfully",
-                    roomId: id,
+                    roomId: room.id,
+                    roomCode: room.roomCode,
                     endedAt: new Date().toISOString(),
                 });
             } catch (error) {
@@ -526,14 +548,19 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.get("/:id/playback", async (c) => {
+        this.app.get("/:code/playback", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                let playbackState = await RoomStateService.getPlaybackState(id);
+                const room = await RoomModel.selectRoomByCode(code);
+                if (!room) {
+                    return c.json({ error: "Room not found" }, 404);
+                }
+
+                let playbackState = await RoomStateService.getPlaybackState(room.id);
                 if (!playbackState) {
                     playbackState = {
                         mediaId: null,
@@ -549,7 +576,8 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 return c.json({
-                    roomId: id,
+                    roomId: room.id,
+                    roomCode: room.roomCode,
                     playbackState,
                 });
             } catch (error) {
@@ -559,17 +587,23 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.get("/:id/participants", async (c) => {
+        this.app.get("/:code/participants", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                const participants = await RoomStateService.getParticipants(id);
+                const room = await RoomModel.selectRoomByCode(code);
+                if (!room) {
+                    return c.json({ error: "Room not found" }, 404);
+                }
+
+                const participants = await RoomStateService.getParticipants(room.id);
 
                 return c.json({
-                    roomId: id,
+                    roomId: room.id,
+                    roomCode: room.roomCode,
                     count: participants.length,
                     participants,
                 });
@@ -580,17 +614,23 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.get("/:id/messages", async (c) => {
+        this.app.get("/:code/messages", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                const messages = await RoomStateService.getMessages(id, 100);
+                const room = await RoomModel.selectRoomByCode(code);
+                if (!room) {
+                    return c.json({ error: "Room not found" }, 404);
+                }
+
+                const messages = await RoomStateService.getMessages(room.id, 100);
 
                 return c.json({
-                    roomId: id,
+                    roomId: room.id,
+                    roomCode: room.roomCode,
                     messages,
                 });
             } catch (error) {
