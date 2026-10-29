@@ -178,6 +178,10 @@ export default function RoomPage() {
           setYoutubeVideoId(extractYoutubeId(data.playbackState.sourceUrl || ""));
           setStatus("Connected");
           setError("");
+          setPasscodePromptOpen(false);
+          setIsCheckingPasscode(false);
+          setPasscodeError("");
+          setRoomPasscode("");
         });
         activeSocket.on("room:user-joined", (participant: Participant) => {
           setParticipantCount((count) => count + 1);
@@ -196,15 +200,16 @@ export default function RoomPage() {
           setMessages((current) => [...current, message].slice(-100));
         });
         activeSocket.on("error", (socketError: SocketError) => {
+          setIsCheckingPasscode(false);
           if (socketError.code === "PASSCODE_REQUIRED" || socketError.code === "INVALID_PASSCODE") {
             setPasscodePromptOpen(true);
             setPasscodeError(socketError.code === "INVALID_PASSCODE" ? "The passcode is incorrect." : "");
-            setIsCheckingPasscode(false);
             setStatus("Passcode required");
           } else if (socketError.code === "CHAT_RATE_LIMIT" || socketError.code === "CHAT_EMPTY") {
             setError(socketError.message || "Please wait a moment before sending another message.");
             return;
           } else {
+            setPasscodeError(socketError.message || "Unable to join this room.");
             setError(socketError.message || "Unable to join this room.");
             setStatus("Unable to join");
           }
@@ -363,13 +368,22 @@ export default function RoomPage() {
 
   function submitPasscode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (roomPasscode.trim().length < 4 || !socketRef.current?.connected) return;
+    const passcode = roomPasscode.trim();
+    if (passcode.length < 4) {
+      setPasscodeError("Passcode must contain at least 4 characters.");
+      return;
+    }
+    if (!socketRef.current?.connected) {
+      setPasscodeError("Realtime connection not ready. Retrying connection...");
+      socketRef.current?.connect();
+      return;
+    }
 
     setIsCheckingPasscode(true);
     setPasscodeError("");
     socketRef.current.emit("room:join", {
       roomId: roomIdRef.current,
-      passcode: roomPasscode.trim(),
+      passcode,
     });
   }
 

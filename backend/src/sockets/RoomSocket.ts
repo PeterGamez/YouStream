@@ -115,7 +115,8 @@ export default class RoomSocket {
 
     public static register(socket: Socket): void {
         socket.on("room:join", async (data: RoomJoinPayload) => {
-            if (!data?.roomId) {
+            try {
+                if (!data?.roomId) {
                 const errorPayload: SocketErrorPayload = {
                     code: "INVALID_ROOM_ID",
                     message: "Room ID is required",
@@ -291,7 +292,16 @@ export default class RoomSocket {
                     role,
                 });
             }
-        });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.server.error("Socket:Room", `Error in room:join: ${message}`);
+            const errorPayload: SocketErrorPayload = {
+                code: "INTERNAL_ERROR",
+                message: "Failed to join room. Please try again.",
+            };
+            socket.emit("error", errorPayload);
+        }
+    });
 
         socket.on("room:leave", async (data: RoomLeavePayload) => {
             const session = await RoomStateService.getSocketSession(socket.id);
