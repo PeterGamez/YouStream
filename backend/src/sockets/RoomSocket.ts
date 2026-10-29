@@ -40,10 +40,7 @@ export default class RoomSocket {
         const roomKey = RoomStateService.getRoomKey(roomId);
         const timeoutSeconds = Math.round(this.HOST_GRACE_PERIOD_MS / 1000);
 
-        this.server.log(
-            "Socket:Room",
-            `Host ${hostId} left/disconnected from room ${roomId}. Room deletion scheduled in ${timeoutSeconds}s (grace period).`
-        );
+        this.server.log("Socket:Room", `Host ${hostId} left/disconnected from room ${roomId}. Room deletion scheduled in ${timeoutSeconds}s (grace period).`);
 
         this.io.to(roomKey).emit("room:host-disconnected", {
             roomId,
@@ -92,10 +89,7 @@ export default class RoomSocket {
                     this.server.warn("Socket:Room", `Redis cleanup error after grace period for room ${roomId}: ${redisMsg}`);
                 }
 
-                this.server.log(
-                    "Socket:Room",
-                    `Host ${hostId} did not return within ${timeoutSeconds}s. Room ${roomId} deleted from database.`
-                );
+                this.server.log("Socket:Room", `Host ${hostId} did not return within ${timeoutSeconds}s. Room ${roomId} deleted from database.`);
                 RoomSocket.endRoom(roomId, defaultReason || "Room has been closed because the host did not reconnect in time");
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
@@ -121,7 +115,8 @@ export default class RoomSocket {
 
     public static register(socket: Socket): void {
         socket.on("room:join", async (data: RoomJoinPayload) => {
-            if (!data?.roomId) {
+            try {
+                if (!data?.roomId) {
                 const errorPayload: SocketErrorPayload = {
                     code: "INVALID_ROOM_ID",
                     message: "Room ID is required",
@@ -145,15 +140,6 @@ export default class RoomSocket {
                 const errorPayload: SocketErrorPayload = {
                     code: "ROOM_NOT_FOUND",
                     message: "Room not found",
-                };
-                socket.emit("error", errorPayload);
-                return;
-            }
-
-            if (room.status !== "active") {
-                const errorPayload: SocketErrorPayload = {
-                    code: "ROOM_ENDED",
-                    message: "This room has ended and is no longer active",
                 };
                 socket.emit("error", errorPayload);
                 return;
@@ -279,7 +265,6 @@ export default class RoomSocket {
                     title: room.title,
                     description: room.description,
                     hostId: room.hostId,
-                    status: room.status,
                     mediaType: room.mediaType,
                     currentMediaId: room.currentMediaId,
                     isPrivate: !!room.isPrivate,
@@ -307,7 +292,16 @@ export default class RoomSocket {
                     role,
                 });
             }
-        });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.server.error("Socket:Room", `Error in room:join: ${message}`);
+            const errorPayload: SocketErrorPayload = {
+                code: "INTERNAL_ERROR",
+                message: "Failed to join room. Please try again.",
+            };
+            socket.emit("error", errorPayload);
+        }
+    });
 
         socket.on("room:leave", async (data: RoomLeavePayload) => {
             const session = await RoomStateService.getSocketSession(socket.id);
@@ -327,7 +321,7 @@ export default class RoomSocket {
                 const participant = await RoomStateService.getParticipant(roomId, userId);
                 if (participant && participant.socketId === socket.id) {
                     const remainingSockets = await this.io.in(roomKey).fetchSockets();
-                    const otherSocket = remainingSockets.find((s) => (s.data?.userId || s.data?.user?.id) === userId);
+                    const otherSocket = remainingSockets.find((s) => s.id !== socket.id && (s.data?.userId || s.data?.user?.id) === userId);
 
                     if (otherSocket) {
                         participant.socketId = otherSocket.id;
@@ -470,7 +464,7 @@ export default class RoomSocket {
 
                 if (participant && participant.socketId === socket.id) {
                     const remainingSockets = await this.io.in(roomKey).fetchSockets();
-                    const otherSocket = remainingSockets.find((s) => (s.data?.userId || s.data?.user?.id) === session.userId);
+                    const otherSocket = remainingSockets.find((s) => s.id !== socket.id && (s.data?.userId || s.data?.user?.id) === session.userId);
 
                     if (otherSocket) {
                         participant.socketId = otherSocket.id;
@@ -485,11 +479,7 @@ export default class RoomSocket {
 
                         const room = await RoomModel.selectRoom(session.roomId);
                         if (room && room.hostId === session.userId) {
-                            RoomSocket.scheduleHostDisconnect(
-                                session.roomId,
-                                session.userId,
-                                "Room has been closed because the host disconnected"
-                            );
+                            RoomSocket.scheduleHostDisconnect(session.roomId, session.userId, "Room has been closed because the host disconnected");
                         }
                     }
                 }

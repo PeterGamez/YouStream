@@ -12,6 +12,9 @@ import type Server from "../Server";
 import type { MediaInterface, MediaSourceType } from "../interfaces/Database";
 import type { RouteInterface } from "../interfaces/Route";
 import MediaModel from "../models/MediaModel";
+import RoomModel from "../models/RoomModel";
+import RoomStateService from "../services/RoomStateService";
+import SocketService from "../services/SocketService";
 
 export default class MediaRoute implements RouteInterface {
     private readonly basePath = "/media";
@@ -19,7 +22,7 @@ export default class MediaRoute implements RouteInterface {
     private server: Server;
     private readonly uploadDir: string;
 
-    private static readonly YOUTUBE_REGEX = /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/;
+    private static readonly YOUTUBE_REGEX = /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/;
     private static readonly MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
     private static readonly ALLOWED_MIME_TYPES = ["video/mp4", "video/webm"];
 
@@ -165,9 +168,10 @@ export default class MediaRoute implements RouteInterface {
                     }
 
                     const ext = path.extname(file.name) || (file.type === "video/webm" ? ".webm" : ".mp4");
-                    const cleanBase = path.basename(file.name, ext).replace(/[^a-zA-Z0-9_-]/g, "_");
+                    const cleanBase = path.basename(file.name, ext).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
                     const uniqueFilename = `${Date.now()}_${cleanBase}${ext}`;
                     const targetPath = path.join(this.uploadDir, uniqueFilename);
+                    const title = (file.name || "Uploaded Video").slice(0, 250);
 
                     let bytesWritten = 0;
                     const sizeLimiter = new Transform({
@@ -193,17 +197,18 @@ export default class MediaRoute implements RouteInterface {
                         throw streamError;
                     }
 
-                    const fileUrl = `/media/stream/${uniqueFilename}`;
+                    const apiPrefix = this.server.config.path === "/" ? "" : this.server.config.path;
+                    const fileUrl = `${apiPrefix}/media/stream/${uniqueFilename}`;
 
-                    const mediaId = await MediaModel.createMedia(user.id, "local_file", file.name, fileUrl, null, targetPath, bytesWritten || file.size, file.type, null);
+                    const mediaId = await MediaModel.createMedia(user.id, "local_file", title, fileUrl, null, targetPath, bytesWritten || file.size, file.type, null);
 
-                    this.server.log("Media Route", `User ${user.id} uploaded ${file.name} (${bytesWritten || file.size} bytes) -> mediaId ${mediaId}`);
+                    this.server.log("Media Route", `User ${user.id} uploaded ${title} (${bytesWritten || file.size} bytes) -> mediaId ${mediaId}`);
 
                     return c.json(
                         {
                             message: "File uploaded successfully",
                             mediaId,
-                            title: file.name,
+                            title,
                             fileUrl,
                             sourceType: "local_file",
                             fileSizeBytes: bytesWritten || file.size,
@@ -234,7 +239,7 @@ export default class MediaRoute implements RouteInterface {
                 }
 
                 const url = body.url?.trim() || body.sourceUrl?.trim();
-                const title = body.title?.trim() || "YouTube Video";
+                const title = (body.title?.trim() || "YouTube Video").slice(0, 250);
 
                 if (!url) {
                     return c.json({ error: "YouTube URL is required" }, 400);
@@ -335,6 +340,34 @@ export default class MediaRoute implements RouteInterface {
                     } catch (fsErr) {
                         const fsMsg = fsErr instanceof Error ? fsErr.message : String(fsErr);
                         this.server.warn("Media Route", `Failed to unlink file ${media.filePath}: ${fsMsg}`);
+                    }
+                }
+
+                const affectedRooms = await RoomModel.selectRoomsByCurrentMediaId(id);
+                await RoomModel.clearCurrentMedia(id);
+
+                for (const affectedRoom of affectedRooms) {
+                    try {
+                        await RoomStateService.setPlaybackState(affectedRoom.id, {
+                            mediaId: null,
+                            mediaType: "none",
+                            sourceUrl: "",
+                            currentTime: 0,
+                            isPlaying: false,
+                            playbackSpeed: 1,
+                            updatedAt: new Date().toISOString(),
+                        });
+                        const roomKey = RoomStateService.getRoomKey(affectedRoom.id);
+                        SocketService.io.to(roomKey).emit("video:update", {
+                            sourceType: "none",
+                            mediaId: null,
+                            title: "No video selected",
+                            youtubeId: "",
+                            fileUrl: "",
+                        });
+                    } catch (roomSyncErr) {
+                        const syncMsg = roomSyncErr instanceof Error ? roomSyncErr.message : String(roomSyncErr);
+                        this.server.warn("Media Route", `Failed to reset room ${affectedRoom.id} after media deletion: ${syncMsg}`);
                     }
                 }
 

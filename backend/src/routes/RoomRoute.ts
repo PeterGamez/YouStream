@@ -31,7 +31,7 @@ export default class RoomRoute implements RouteInterface {
                 const search = (c.req.query("search") || "").trim().toLowerCase();
                 const mediaType = c.req.query("mediaType") || "all";
 
-                const activeRooms = await RoomModel.selectActiveRoomsWithHost();
+                const activeRooms = await RoomModel.selectRoomsWithHost();
                 const filteredRooms = activeRooms.filter((r) => {
                     if (search) {
                         const titleMatch = (r.title || "").toLowerCase().includes(search);
@@ -63,7 +63,6 @@ export default class RoomRoute implements RouteInterface {
                             description: room.description,
                             hostId: room.hostId,
                             host: room.host,
-                            status: room.status,
                             mediaType: room.mediaType,
                             currentMediaId: room.currentMediaId,
                             isPrivate: room.isPrivate,
@@ -71,7 +70,6 @@ export default class RoomRoute implements RouteInterface {
                             maxParticipants: room.maxParticipants,
                             createdAt: room.createdAt,
                             updatedAt: room.updatedAt,
-                            endedAt: room.endedAt,
                         };
 
                         return safeRoom;
@@ -123,7 +121,11 @@ export default class RoomRoute implements RouteInterface {
 
                 const description = body.description?.trim() || "";
                 const isPrivate = Boolean(body.isPrivate);
-                const maxParticipants = body.maxParticipants ?? 100;
+                const rawMax = body.maxParticipants !== undefined ? Number(body.maxParticipants) : 100;
+                if (isNaN(rawMax) || rawMax < 1 || rawMax > 1000) {
+                    return c.json({ error: "Max participants must be a number between 1 and 1000" }, 400);
+                }
+                const maxParticipants = rawMax;
                 const mediaType: RoomMediaType = body.mediaType || "none";
 
                 let passcodeHash: string = null;
@@ -136,13 +138,30 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 let roomCode = "";
-                let exists = true;
-                while (exists) {
+                let roomId = 0;
+                const maxAttempts = 10;
+
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                     roomCode = Math.floor(10000000 + Math.random() * 90000000).toString();
-                    exists = await RoomModel.selectRoomExistsByCode(roomCode);
+                    const exists = await RoomModel.selectRoomExistsByCode(roomCode);
+                    if (exists) continue;
+
+                    try {
+                        roomId = await RoomModel.createRoom(roomCode, title, user.id, description, isPrivate, passcodeHash, maxParticipants, mediaType, null);
+                        break;
+                    } catch (insertErr: unknown) {
+                        const isDuplicateKey =
+                            insertErr && typeof insertErr === "object" && ("code" in insertErr ? insertErr.code === "ER_DUP_ENTRY" : String(insertErr).includes("Duplicate entry"));
+                        if (isDuplicateKey && attempt < maxAttempts) {
+                            continue;
+                        }
+                        throw insertErr;
+                    }
                 }
 
-                const roomId = await RoomModel.createRoom(roomCode, title, user.id, description, isPrivate, passcodeHash, maxParticipants, mediaType, null);
+                if (!roomId) {
+                    return c.json({ error: "Failed to generate unique room code. Please try again." }, 500);
+                }
 
                 try {
                     await RoomStateService.addActiveRoom(roomId);
@@ -169,14 +188,12 @@ export default class RoomRoute implements RouteInterface {
                     title: createdRoom.title,
                     description: createdRoom.description,
                     hostId: createdRoom.hostId,
-                    status: createdRoom.status,
                     mediaType: createdRoom.mediaType,
                     currentMediaId: createdRoom.currentMediaId,
                     isPrivate: createdRoom.isPrivate,
                     maxParticipants: createdRoom.maxParticipants,
                     createdAt: createdRoom.createdAt,
                     updatedAt: createdRoom.updatedAt,
-                    endedAt: createdRoom.endedAt,
                 };
 
                 this.server.log("Room Route", `Created room ${roomId} (${roomCode}) by user ${user.id}`);
@@ -195,14 +212,17 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.get("/code/:code", async (c) => {
+        this.app.get("/:code", async (c) => {
             try {
-                const code = c.req.param("code")?.trim();
-                if (!code) {
-                    return c.json({ error: "Room code is required" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                const room = await RoomModel.selectRoomByCode(code);
+                let room = await RoomModel.selectRoomByCode(code);
+                if (!room && !isNaN(Number(code))) {
+                    room = await RoomModel.selectRoom(Number(code));
+                }
                 if (!room) {
                     return c.json({ error: "Room not found" }, 404);
                 }
@@ -240,7 +260,6 @@ export default class RoomRoute implements RouteInterface {
                     description: room.description,
                     hostId: room.hostId,
                     host,
-                    status: room.status,
                     mediaType: effectiveMedia.mediaType,
                     currentMediaId: effectiveMedia.currentMediaId,
                     isPrivate: room.isPrivate,
@@ -248,7 +267,71 @@ export default class RoomRoute implements RouteInterface {
                     maxParticipants: room.maxParticipants,
                     createdAt: room.createdAt,
                     updatedAt: room.updatedAt,
-                    endedAt: room.endedAt,
+                };
+
+                return c.json({ room: safeRoom });
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.server.error("Room Route", `Get /rooms/:code error: ${message}`);
+                return c.json({ error: "Failed to retrieve room" }, 500);
+            }
+        });
+
+        this.app.get("/code/:code", async (c) => {
+            try {
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
+                }
+
+                let room = await RoomModel.selectRoomByCode(code);
+                if (!room && !isNaN(Number(code))) {
+                    room = await RoomModel.selectRoom(Number(code));
+                }
+                if (!room) {
+                    return c.json({ error: "Room not found" }, 404);
+                }
+
+                let host = undefined;
+                try {
+                    const hostUser = await UserModel.selectUser(room.hostId);
+                    if (hostUser) {
+                        host = {
+                            id: hostUser.id,
+                            displayName: hostUser.displayName,
+                            avatarUrl: hostUser.avatarUrl,
+                        };
+                    }
+                } catch {
+                    // ignore
+                }
+
+                let participantCount = 0;
+                try {
+                    participantCount = await RoomStateService.getParticipantCount(room.id);
+                } catch {
+                    // ignore
+                }
+
+                const effectiveMedia = await RoomReconciliationService.getEffectiveRoomMedia(room.id, {
+                    mediaType: room.mediaType,
+                    currentMediaId: room.currentMediaId,
+                });
+
+                const safeRoom: RoomSafeDTO & { host?: typeof host; participantCount: number } = {
+                    id: room.id,
+                    roomCode: room.roomCode,
+                    title: room.title,
+                    description: room.description,
+                    hostId: room.hostId,
+                    host,
+                    mediaType: effectiveMedia.mediaType,
+                    currentMediaId: effectiveMedia.currentMediaId,
+                    isPrivate: room.isPrivate,
+                    participantCount,
+                    maxParticipants: room.maxParticipants,
+                    createdAt: room.createdAt,
+                    updatedAt: room.updatedAt,
                 };
 
                 return c.json({ room: safeRoom });
@@ -259,84 +342,23 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.get("/:id", async (c) => {
+        this.app.post("/:code/verify-passcode", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                const room = await RoomModel.selectRoom(id);
-                if (!room) {
-                    return c.json({ error: "Room not found" }, 404);
+                let room = await RoomModel.selectRoomByCode(code);
+                if (!room && !isNaN(Number(code))) {
+                    room = await RoomModel.selectRoom(Number(code));
                 }
-
-                let host = undefined;
-                try {
-                    const hostUser = await UserModel.selectUser(room.hostId);
-                    if (hostUser) {
-                        host = {
-                            id: hostUser.id,
-                            displayName: hostUser.displayName,
-                            avatarUrl: hostUser.avatarUrl,
-                        };
-                    }
-                } catch {
-                    // ignore
-                }
-
-                let participantCount = 0;
-                try {
-                    participantCount = await RoomStateService.getParticipantCount(room.id);
-                } catch {
-                    // ignore
-                }
-
-                const effectiveMedia = await RoomReconciliationService.getEffectiveRoomMedia(room.id, {
-                    mediaType: room.mediaType,
-                    currentMediaId: room.currentMediaId,
-                });
-
-                const safeRoom: RoomSafeDTO & { host?: typeof host; participantCount: number } = {
-                    id: room.id,
-                    roomCode: room.roomCode,
-                    title: room.title,
-                    description: room.description,
-                    hostId: room.hostId,
-                    host,
-                    status: room.status,
-                    mediaType: effectiveMedia.mediaType,
-                    currentMediaId: effectiveMedia.currentMediaId,
-                    isPrivate: room.isPrivate,
-                    participantCount,
-                    maxParticipants: room.maxParticipants,
-                    createdAt: room.createdAt,
-                    updatedAt: room.updatedAt,
-                    endedAt: room.endedAt,
-                };
-
-                return c.json({ room: safeRoom });
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                this.server.error("Room Route", `Get /rooms/:id error: ${message}`);
-                return c.json({ error: "Failed to retrieve room" }, 500);
-            }
-        });
-
-        this.app.post("/:id/verify-passcode", async (c) => {
-            try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
-                }
-
-                const room = await RoomModel.selectRoom(id);
                 if (!room) {
                     return c.json({ error: "Room not found" }, 404);
                 }
 
                 if (!room.isPrivate || !room.passcode) {
-                    return c.json({ verified: true, roomId: room.id });
+                    return c.json({ verified: true, roomId: room.id, roomCode: room.roomCode });
                 }
 
                 let body: { passcode?: string };
@@ -356,7 +378,7 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Invalid passcode", verified: false }, 401);
                 }
 
-                return c.json({ verified: true, roomId: room.id });
+                return c.json({ verified: true, roomId: room.id, roomCode: room.roomCode });
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 this.server.error("Room Route", `Verify passcode error: ${message}`);
@@ -364,11 +386,11 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.patch("/:id", async (c) => {
+        this.app.patch("/:code", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
                 const user = await this.server.Middleware.getUser(c);
@@ -376,7 +398,10 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Unauthorized" }, 401);
                 }
 
-                const room = await RoomModel.selectRoom(id);
+                let room = await RoomModel.selectRoomByCode(code);
+                if (!room && !isNaN(Number(code))) {
+                    room = await RoomModel.selectRoom(Number(code));
+                }
                 if (!room) {
                     return c.json({ error: "Room not found" }, 404);
                 }
@@ -413,7 +438,11 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 if (body.maxParticipants !== undefined) {
-                    fieldsToUpdate.maxParticipants = body.maxParticipants;
+                    const max = Number(body.maxParticipants);
+                    if (isNaN(max) || max < 1 || max > 1000) {
+                        return c.json({ error: "Max participants must be a number between 1 and 1000" }, 400);
+                    }
+                    fieldsToUpdate.maxParticipants = max;
                 }
 
                 if (body.isPrivate !== undefined) {
@@ -444,24 +473,22 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 if (Object.keys(fieldsToUpdate).length > 0) {
-                    await RoomModel.updateRoomFields(id, fieldsToUpdate);
+                    await RoomModel.updateRoomFields(room.id, fieldsToUpdate);
                 }
 
-                const updatedRoom = await RoomModel.selectRoom(id);
+                const updatedRoom = await RoomModel.selectRoom(room.id);
                 const safeRoom: RoomSafeDTO = {
                     id: updatedRoom.id,
                     roomCode: updatedRoom.roomCode,
                     title: updatedRoom.title,
                     description: updatedRoom.description,
                     hostId: updatedRoom.hostId,
-                    status: updatedRoom.status,
                     mediaType: updatedRoom.mediaType,
                     currentMediaId: updatedRoom.currentMediaId,
                     isPrivate: updatedRoom.isPrivate,
                     maxParticipants: updatedRoom.maxParticipants,
                     createdAt: updatedRoom.createdAt,
                     updatedAt: updatedRoom.updatedAt,
-                    endedAt: updatedRoom.endedAt,
                 };
 
                 return c.json({
@@ -475,11 +502,11 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.post("/:id/end", async (c) => {
+        this.app.post("/:code/end", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
                 const user = await this.server.Middleware.getUser(c);
@@ -487,7 +514,10 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Unauthorized" }, 401);
                 }
 
-                const room = await RoomModel.selectRoom(id);
+                let room = await RoomModel.selectRoomByCode(code);
+                if (!room && !isNaN(Number(code))) {
+                    room = await RoomModel.selectRoom(Number(code));
+                }
                 if (!room) {
                     return c.json({ error: "Room not found" }, 404);
                 }
@@ -496,27 +526,30 @@ export default class RoomRoute implements RouteInterface {
                     return c.json({ error: "Forbidden: Only the room host can end the room" }, 403);
                 }
 
-                await RoomModel.deleteRoom(id);
+                RoomSocket.cancelHostDisconnect(room.id);
+
+                await RoomModel.deleteRoom(room.id);
 
                 try {
-                    await RoomStateService.cleanupRoom(id);
+                    await RoomStateService.cleanupRoom(room.id);
                 } catch (redisErr) {
                     const redisMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
-                    this.server.warn("Room Route", `Redis cleanup error for room ${id}: ${redisMsg}`);
+                    this.server.warn("Room Route", `Redis cleanup error for room ${room.id}: ${redisMsg}`);
                 }
 
                 try {
-                    RoomSocket.endRoom(id, "Room has been closed by the host");
+                    RoomSocket.endRoom(room.id, "Room has been closed by the host");
                 } catch (socketErr) {
                     const socketMsg = socketErr instanceof Error ? socketErr.message : String(socketErr);
                     this.server.warn("Room Route", `Socket endRoom emit error: ${socketMsg}`);
                 }
 
-                this.server.log("Room Route", `Room ${id} deleted by user ${user.id}`);
+                this.server.log("Room Route", `Room ${room.id} (${room.roomCode}) deleted by user ${user.id}`);
 
                 return c.json({
                     message: "Room deleted successfully",
-                    roomId: id,
+                    roomId: room.id,
+                    roomCode: room.roomCode,
                     endedAt: new Date().toISOString(),
                 });
             } catch (error) {
@@ -526,14 +559,22 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.get("/:id/playback", async (c) => {
+        this.app.get("/:code/playback", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                let playbackState = await RoomStateService.getPlaybackState(id);
+                let room = await RoomModel.selectRoomByCode(code);
+                if (!room && !isNaN(Number(code))) {
+                    room = await RoomModel.selectRoom(Number(code));
+                }
+                if (!room) {
+                    return c.json({ error: "Room not found" }, 404);
+                }
+
+                let playbackState = await RoomStateService.getPlaybackState(room.id);
                 if (!playbackState) {
                     playbackState = {
                         mediaId: null,
@@ -549,7 +590,8 @@ export default class RoomRoute implements RouteInterface {
                 }
 
                 return c.json({
-                    roomId: id,
+                    roomId: room.id,
+                    roomCode: room.roomCode,
                     playbackState,
                 });
             } catch (error) {
@@ -559,17 +601,26 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.get("/:id/participants", async (c) => {
+        this.app.get("/:code/participants", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                const participants = await RoomStateService.getParticipants(id);
+                let room = await RoomModel.selectRoomByCode(code);
+                if (!room && !isNaN(Number(code))) {
+                    room = await RoomModel.selectRoom(Number(code));
+                }
+                if (!room) {
+                    return c.json({ error: "Room not found" }, 404);
+                }
+
+                const participants = await RoomStateService.getParticipants(room.id);
 
                 return c.json({
-                    roomId: id,
+                    roomId: room.id,
+                    roomCode: room.roomCode,
                     count: participants.length,
                     participants,
                 });
@@ -580,17 +631,26 @@ export default class RoomRoute implements RouteInterface {
             }
         });
 
-        this.app.get("/:id/messages", async (c) => {
+        this.app.get("/:code/messages", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                const messages = await RoomStateService.getMessages(id, 100);
+                let room = await RoomModel.selectRoomByCode(code);
+                if (!room && !isNaN(Number(code))) {
+                    room = await RoomModel.selectRoom(Number(code));
+                }
+                if (!room) {
+                    return c.json({ error: "Room not found" }, 404);
+                }
+
+                const messages = await RoomStateService.getMessages(room.id, 100);
 
                 return c.json({
-                    roomId: id,
+                    roomId: room.id,
+                    roomCode: room.roomCode,
                     messages,
                 });
             } catch (error) {

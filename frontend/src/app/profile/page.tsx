@@ -27,6 +27,13 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordStatus, setPasswordStatus] = useState<"idle" | "saving">("idle");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordNotice, setPasswordNotice] = useState("");
+
   useEffect(() => {
     let isCurrent = true;
 
@@ -106,16 +113,51 @@ export default function ProfilePage() {
     }
   }
 
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPasswordError("");
+    setPasswordNotice("");
+
+    if (!currentPassword) {
+      setPasswordError("Please enter your current password.");
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordError("New password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New passwords do not match.");
+      return;
+    }
+
+    setPasswordStatus("saving");
+    try {
+      await apiRequest("/users/me/password", {
+        method: "PATCH",
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
+      setPasswordNotice("Your password has been updated successfully.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Could not update your password.");
+    } finally {
+      setPasswordStatus("idle");
+    }
+  }
+
   function signOut() {
     clearTokens();
     router.replace("/login");
   }
 
   const activeAvatarSrc = avatarUrl.trim() || profile?.avatarUrl;
-  const isUnchanged =
-    profile !== null &&
-    displayName.trim() === profile.displayName &&
-    avatarUrl.trim() === (profile.avatarUrl || "").trim();
+  const isUnchanged = profile !== null && displayName.trim() === profile.displayName && avatarUrl.trim() === (profile.avatarUrl || "").trim();
 
   return (
     <div className={styles.page}>
@@ -138,12 +180,7 @@ export default function ProfilePage() {
               <div className={styles.accountDetails}>
                 <div className={styles.avatarWrapper}>
                   {activeAvatarSrc && !avatarImgFailed ? (
-                    <img
-                      alt={displayName || profile.displayName}
-                      className={styles.avatarImage}
-                      onError={() => setAvatarImgFailed(true)}
-                      src={activeAvatarSrc}
-                    />
+                    <img alt={displayName || profile.displayName} className={styles.avatarImage} onError={() => setAvatarImgFailed(true)} src={activeAvatarSrc} />
                   ) : (
                     <div className={styles.avatarFallback} aria-hidden="true">
                       {(displayName || profile.displayName || "?").slice(0, 1).toUpperCase()}
@@ -158,14 +195,7 @@ export default function ProfilePage() {
 
               <form className={styles.form} onSubmit={saveProfile}>
                 <label htmlFor="profile-display-name">Display name</label>
-                <input
-                  autoComplete="name"
-                  id="profile-display-name"
-                  maxLength={100}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  required
-                  value={displayName}
-                />
+                <input autoComplete="name" id="profile-display-name" maxLength={100} onChange={(event) => setDisplayName(event.target.value)} required value={displayName} />
 
                 <label htmlFor="profile-avatar-url">Profile picture URL (Avatar)</label>
                 <input
@@ -180,9 +210,7 @@ export default function ProfilePage() {
                   type="url"
                   value={avatarUrl}
                 />
-                <span className={styles.inputHelp}>
-                  Enter a direct image link (JPG, PNG, WebP) or leave empty for default Gravatar.
-                </span>
+                <span className={styles.inputHelp}>Enter a direct image link (JPG, PNG, WebP) or leave empty for default Gravatar.</span>
 
                 <label htmlFor="profile-email">Email address</label>
                 <input id="profile-email" readOnly value={profile.email} />
@@ -201,6 +229,64 @@ export default function ProfilePage() {
                   {status === "saving" ? "Saving..." : "Save changes"}
                 </button>
               </form>
+
+              <div className={styles.sectionDivider} />
+              <div className={styles.sectionHeader}>
+                <p className={styles.eyebrow}>SECURITY</p>
+                <h2>Change password</h2>
+                <p className={styles.subtitle}>Update your password to keep your account secure.</p>
+              </div>
+
+              <form className={styles.form} onSubmit={changePassword}>
+                <label htmlFor="profile-current-password">Current password</label>
+                <input
+                  autoComplete="current-password"
+                  id="profile-current-password"
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  required
+                  type="password"
+                  value={currentPassword}
+                />
+
+                <label htmlFor="profile-new-password">New password</label>
+                <input
+                  autoComplete="new-password"
+                  id="profile-new-password"
+                  minLength={6}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  placeholder="At least 6 characters"
+                  required
+                  type="password"
+                  value={newPassword}
+                />
+
+                <label htmlFor="profile-confirm-password">Confirm new password</label>
+                <input
+                  autoComplete="new-password"
+                  id="profile-confirm-password"
+                  minLength={6}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="Repeat new password"
+                  required
+                  type="password"
+                  value={confirmPassword}
+                />
+
+                {passwordError && (
+                  <p className={styles.error} role="alert">
+                    {passwordError}
+                  </p>
+                )}
+                {passwordNotice && (
+                  <p className={styles.notice} role="status">
+                    {passwordNotice}
+                  </p>
+                )}
+                <button disabled={passwordStatus === "saving" || !currentPassword || !newPassword || !confirmPassword} type="submit">
+                  {passwordStatus === "saving" ? "Updating..." : "Update password"}
+                </button>
+              </form>
+
               <button className={styles.signOutButton} onClick={signOut} type="button">
                 Sign out
               </button>

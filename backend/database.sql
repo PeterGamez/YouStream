@@ -34,13 +34,11 @@ CREATE TABLE IF NOT EXISTS `room` (
     `title` VARCHAR(150) NOT NULL,
     `description` TEXT NULL DEFAULT NULL,
     `host_id` INT NOT NULL,
-    `status` ENUM('active', 'ended') NOT NULL DEFAULT 'active',
     `media_type` ENUM('none', 'youtube', 'local_file') NOT NULL DEFAULT 'none',
     `current_media_id` INT NULL DEFAULT NULL,
     `is_private` TINYINT(1) NOT NULL DEFAULT 0,
     `passcode` VARCHAR(255) NULL DEFAULT NULL,
     `max_participants` INT NOT NULL DEFAULT 50,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `ended_at` DATETIME NULL DEFAULT NULL
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

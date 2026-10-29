@@ -97,7 +97,7 @@ export default class VideoSocket {
             } else if (data.sourceType === "youtube") {
                 let cleanYoutubeId = data.youtubeId?.trim();
                 if (cleanYoutubeId) {
-                    const match = cleanYoutubeId.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                    const match = cleanYoutubeId.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
                     if (match && match[1]) {
                         cleanYoutubeId = match[1];
                     }
@@ -115,7 +115,7 @@ export default class VideoSocket {
                 if (!media) {
                     try {
                         const sourceUrl = `https://www.youtube.com/watch?v=${cleanYoutubeId}`;
-                        const title = data.title?.trim() || "YouTube Video";
+                        const title = (data.title?.trim() || "YouTube Video").slice(0, 250);
                         const mediaId = await MediaModel.createMedia(authCheck.userId, "youtube", title, sourceUrl, cleanYoutubeId, null, null, null, null);
                         media = await MediaModel.selectMedia(mediaId);
                     } catch (createErr) {
@@ -279,13 +279,17 @@ export default class VideoSocket {
                 socket.emit("error", errorPayload);
                 return;
             }
-            this.server.log("Socket:Video", `Video control in ${roomKey} by host ${userId}: ${data.action} at ${data.currentTime}s`);
+            const rawCurrentTime = Number(data.currentTime);
+            const currentTime = Number.isFinite(rawCurrentTime) ? Math.max(0, rawCurrentTime) : 0;
+            const speed = data.speed !== undefined && Number.isFinite(Number(data.speed)) && Number(data.speed) > 0 ? Number(data.speed) : 1.0;
+
+            this.server.log("Socket:Video", `Video control in ${roomKey} by host ${userId}: ${data.action} at ${currentTime}s`);
 
             const isPlaying = data.action === "play" ? true : data.action === "pause" ? false : undefined;
             await RoomStateService.setPlaybackState(roomId, {
-                currentTime: data.currentTime,
+                currentTime,
                 ...(isPlaying !== undefined ? { isPlaying } : {}),
-                ...(data.speed !== undefined ? { playbackSpeed: data.speed } : {}),
+                ...(data.speed !== undefined ? { playbackSpeed: speed } : {}),
                 ...(data.volume !== undefined ? { volume: data.volume } : {}),
                 updatedBy: userId,
                 updatedAt: new Date().toISOString(),
@@ -293,8 +297,8 @@ export default class VideoSocket {
 
             socket.to(roomKey).emit("video:sync", {
                 action: data.action,
-                currentTime: data.currentTime,
-                speed: data.speed ?? 1.0,
+                currentTime,
+                speed,
                 timestamp: new Date().toISOString(),
             });
         });

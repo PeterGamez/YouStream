@@ -93,15 +93,7 @@ export default function SiteHeader({ onCreateRoom }: SiteHeaderProps) {
           {isSignedIn === true && (
             <Link aria-label="Edit profile" className={styles.profileLink} href="/profile">
               <span aria-hidden="true" className={styles.profileAvatar}>
-                {profileAvatar && !avatarError ? (
-                  <img
-                    alt=""
-                    onError={() => setAvatarError(true)}
-                    src={profileAvatar}
-                  />
-                ) : (
-                  (profileName || "P").slice(0, 1).toUpperCase()
-                )}
+                {profileAvatar && !avatarError ? <img alt="" onError={() => setAvatarError(true)} src={profileAvatar} /> : (profileName || "P").slice(0, 1).toUpperCase()}
               </span>
               <span>{profileName || "Profile"}</span>
             </Link>

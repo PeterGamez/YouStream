@@ -38,7 +38,7 @@ export default class AdminRoute implements RouteInterface {
                 try {
                     activeRoomsCount = await RoomStateService.getActiveRoomCount();
                 } catch {
-                    const activeRooms = await RoomModel.selectActiveRooms();
+                    const activeRooms = await RoomModel.selectRooms();
                     activeRoomsCount = activeRooms.length;
                 }
 
@@ -160,16 +160,17 @@ export default class AdminRoute implements RouteInterface {
                     return c.json({ error: "User not found" }, 404);
                 }
 
-                const activeRooms = await RoomModel.selectActiveRoomsByHost(id);
+                const activeRooms = await RoomModel.selectRoomsByHost(id);
 
                 for (const room of activeRooms) {
+                    RoomSocket.cancelHostDisconnect(room.id);
                     let cleanedUp = false;
                     let lastError: Error | null = null;
                     const maxRetries = 3;
 
                     for (let attempt = 1; attempt <= maxRetries; attempt++) {
                         try {
-                            await RoomModel.endRoom(room.id);
+                            await RoomModel.deleteRoom(room.id);
                             await RoomStateService.cleanupRoom(room.id);
                             RoomSocket.endRoom(room.id, "Room ended: Host account was suspended by administrator");
                             cleanedUp = true;
@@ -237,37 +238,43 @@ export default class AdminRoute implements RouteInterface {
             }
         });
 
-        this.app.post("/rooms/:id/end", async (c) => {
+        this.app.post("/rooms/:code/end", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
-                    return c.json({ error: "Invalid room ID" }, 400);
+                const code = c.req.param("code");
+                if (!Number(code)) {
+                    return c.json({ error: "Room code must be a number" }, 400);
                 }
 
-                const room = await RoomModel.selectRoom(id);
+                let room = await RoomModel.selectRoomByCode(code);
+                if (!room && !isNaN(Number(code))) {
+                    room = await RoomModel.selectRoom(Number(code));
+                }
                 if (!room) {
                     return c.json({ error: "Room not found" }, 404);
                 }
 
-                await RoomModel.endRoom(id);
+                RoomSocket.cancelHostDisconnect(room.id);
+
+                await RoomModel.deleteRoom(room.id);
 
                 try {
-                    await RoomStateService.cleanupRoom(id);
+                    await RoomStateService.cleanupRoom(room.id);
                 } catch {
                     // ignore
                 }
 
                 try {
-                    RoomSocket.endRoom(id, "Room terminated by administrator");
+                    RoomSocket.endRoom(room.id, "Room terminated by administrator");
                 } catch {
                     // ignore
                 }
 
-                this.server.log("Admin Route", `Room ${id} terminated by admin`);
+                this.server.log("Admin Route", `Room ${room.id} deleted by admin`);
 
                 return c.json({
-                    message: "Room terminated by administrator",
-                    roomId: id,
+                    message: "Room deleted by administrator",
+                    roomId: room.id,
+                    roomCode: room.roomCode,
                     endedAt: new Date().toISOString(),
                 });
             } catch (error) {
@@ -311,6 +318,34 @@ export default class AdminRoute implements RouteInterface {
                     }
                 }
 
+                const affectedRooms = await RoomModel.selectRoomsByCurrentMediaId(id);
+                await RoomModel.clearCurrentMedia(id);
+
+                for (const affectedRoom of affectedRooms) {
+                    try {
+                        await RoomStateService.setPlaybackState(affectedRoom.id, {
+                            mediaId: null,
+                            mediaType: "none",
+                            sourceUrl: "",
+                            currentTime: 0,
+                            isPlaying: false,
+                            playbackSpeed: 1,
+                            updatedAt: new Date().toISOString(),
+                        });
+                        const roomKey = RoomStateService.getRoomKey(affectedRoom.id);
+                        SocketService.io?.to(roomKey).emit("video:update", {
+                            sourceType: "none",
+                            mediaId: null,
+                            title: "No video selected",
+                            youtubeId: "",
+                            fileUrl: "",
+                        });
+                    } catch (roomSyncErr) {
+                        const syncMsg = roomSyncErr instanceof Error ? roomSyncErr.message : String(roomSyncErr);
+                        this.server.warn("Admin Route", `Failed to reset room ${affectedRoom.id} after media deletion: ${syncMsg}`);
+                    }
+                }
+
                 await MediaModel.deleteMedia(id);
 
                 this.server.log("Admin Route", `Media ${id} deleted by admin`);
@@ -337,14 +372,14 @@ export default class AdminRoute implements RouteInterface {
                 }
 
                 const allMedia = await MediaModel.selectAllMedia();
-                const activeFilePaths = new Set(allMedia.map((m) => m.filePath).filter((p): p is string => Boolean(p)));
+                const activeFilePaths = new Set(allMedia.map((m) => (m.filePath ? path.resolve(m.filePath) : null)).filter((p): p is string => Boolean(p)));
 
                 const filesOnDisk = readdirSync(this.uploadDir);
                 let reclaimedFilesCount = 0;
                 let reclaimedSizeBytes = 0;
 
                 for (const file of filesOnDisk) {
-                    const fullPath = path.join(this.uploadDir, file);
+                    const fullPath = path.resolve(this.uploadDir, file);
                     if (!activeFilePaths.has(fullPath)) {
                         try {
                             const stat = statSync(fullPath);

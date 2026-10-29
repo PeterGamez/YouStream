@@ -16,10 +16,8 @@ export default class RoomModel {
         currentMediaId: "current_media_id",
         isPrivate: "is_private",
         maxParticipants: "max_participants",
-        endedAt: "ended_at",
         title: "title",
         description: "description",
-        status: "status",
         passcode: "passcode",
     };
 
@@ -36,7 +34,6 @@ export default class RoomModel {
             title: row.title,
             description: row.description,
             hostId: row.host_id,
-            status: row.status,
             mediaType: row.media_type,
             currentMediaId: row.current_media_id,
             isPrivate: row.is_private,
@@ -44,7 +41,6 @@ export default class RoomModel {
             maxParticipants: row.max_participants,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
-            endedAt: row.ended_at,
         };
     }
 
@@ -102,8 +98,8 @@ export default class RoomModel {
         }
     }
 
-    public static async selectActiveRooms(): Promise<RoomInterface[]> {
-        const sql = `SELECT * FROM ${this.table} WHERE status = 'active' ORDER BY id DESC`;
+    public static async selectRooms(): Promise<RoomInterface[]> {
+        const sql = `SELECT * FROM ${this.table} ORDER BY id DESC`;
         const connection = await this.DB.getConnection();
         try {
             const [rows] = await connection.execute<RoomRawInterface[]>(sql);
@@ -113,8 +109,8 @@ export default class RoomModel {
         }
     }
 
-    public static async selectActiveRoomsByHost(hostId: number): Promise<RoomInterface[]> {
-        const sql = `SELECT * FROM ${this.table} WHERE host_id = ? AND status = 'active' ORDER BY id DESC`;
+    public static async selectRoomsByHost(hostId: number): Promise<RoomInterface[]> {
+        const sql = `SELECT * FROM ${this.table} WHERE host_id = ? ORDER BY id DESC`;
         const connection = await this.DB.getConnection();
         try {
             const [rows] = await connection.execute<RoomRawInterface[]>(sql, [hostId]);
@@ -124,7 +120,7 @@ export default class RoomModel {
         }
     }
 
-    public static async selectActiveRoomsWithHost(): Promise<(RoomInterface & { host: RoomHostDTO })[]> {
+    public static async selectRoomsWithHost(): Promise<(RoomInterface & { host: RoomHostDTO })[]> {
         const sql = `
             SELECT 
                 r.*,
@@ -132,7 +128,6 @@ export default class RoomModel {
                 u.avatar_url AS host_avatar_url
             FROM ${this.table} r
             LEFT JOIN ${UserModel.getTable} u ON r.host_id = u.id
-            WHERE r.status = 'active'
             ORDER BY r.id DESC
         `;
         const connection = await this.DB.getConnection();
@@ -205,14 +200,29 @@ export default class RoomModel {
         }
     }
 
-    public static async endRoom(id: number): Promise<void> {
-        const sql = `UPDATE ${this.table} SET status = 'ended', ended_at = NOW() WHERE id = ?`;
+    public static async selectRoomsByCurrentMediaId(mediaId: number): Promise<RoomInterface[]> {
+        const sql = `SELECT * FROM ${this.table} WHERE current_media_id = ?`;
         const connection = await this.DB.getConnection();
         try {
-            await connection.execute(sql, [id]);
+            const [rows] = await connection.execute<RoomRawInterface[]>(sql, [mediaId]);
+            return rows.map((row) => this.mapRowToRoom(row)).filter((r): r is RoomInterface => r !== null);
         } finally {
             connection.release();
         }
+    }
+
+    public static async clearCurrentMedia(mediaId: number): Promise<void> {
+        const sql = `UPDATE ${this.table} SET media_type = 'none', current_media_id = NULL WHERE current_media_id = ?`;
+        const connection = await this.DB.getConnection();
+        try {
+            await connection.execute(sql, [mediaId]);
+        } finally {
+            connection.release();
+        }
+    }
+
+    public static async endRoom(id: number): Promise<void> {
+        await this.deleteRoom(id);
     }
 
     public static async deleteRoom(id: number): Promise<void> {

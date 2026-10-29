@@ -5,6 +5,7 @@ import type Server from "../Server";
 import type { UserSafeDTO } from "../interfaces/Database";
 import type { RouteInterface } from "../interfaces/Route";
 import UserModel from "../models/UserModel";
+import SocketService from "../services/SocketService";
 import UserService from "../services/UserService";
 
 export default class UserRoute implements RouteInterface {
@@ -75,8 +76,17 @@ export default class UserRoute implements RouteInterface {
                     }
                 }
 
-                await UserModel.updateUserFields(user.id, { displayName, avatarUrl });
+                await UserModel.updateUserFields(user.id, {
+                    displayName: displayName !== undefined ? displayName.trim() : undefined,
+                    avatarUrl: avatarUrl !== undefined ? avatarUrl.trim() : undefined,
+                });
                 await UserService.delUser(user.id);
+
+                try {
+                    await SocketService.refreshUserSockets(user.id);
+                } catch {
+                    // ignore
+                }
 
                 this.server.log("User Route", `User updated profile: ${user.id} (${user.username})`);
 
@@ -127,6 +137,7 @@ export default class UserRoute implements RouteInterface {
                 const hashedPassword = await this.server.Password.hash(newPassword);
 
                 await UserModel.updateUser(user.id, "password", hashedPassword);
+                await UserService.delUser(user.id);
 
                 this.server.log("User Route", `User changed password: ${user.id} (${user.username})`);
 
@@ -148,6 +159,11 @@ export default class UserRoute implements RouteInterface {
                 const payload = c.get("jwtPayload");
                 if (payload?.userId) {
                     await UserService.delUser(payload.userId);
+                    try {
+                        await SocketService.revokeUserSockets(payload.userId, "User logged out");
+                    } catch {
+                        // ignore
+                    }
                     this.server.log("User Route", `User logged out: ${payload.userId}`);
                 }
 

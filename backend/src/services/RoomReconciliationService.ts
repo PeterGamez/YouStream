@@ -143,6 +143,12 @@ export default class RoomReconciliationService {
                 job.attempts++;
                 job.lastError = error instanceof Error ? error.message : String(error);
                 this.server?.warn("Reconciliation", `Failed attempt ${job.attempts} to reconcile room ${roomId}: ${job.lastError}`);
+
+                if (job.attempts >= 10) {
+                    this.server?.error("Reconciliation", `Aborting reconciliation for room ${roomId} after ${job.attempts} failed attempts: ${job.lastError}`);
+                    await this.cancelRollback(roomId);
+                }
+
                 return false;
             }
         })();

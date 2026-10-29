@@ -80,7 +80,7 @@
 | **FR-05** | Room Directory | ผู้ใช้สามารถค้นหาห้องตามชื่อห้อง หรือค้นหาด้วยรหัสห้องตัวเลข 8 หลัก (Room Code) หรือกรองตามสถานะ/ประเภทของสื่อได้ | Medium |
 | **FR-06** | Room Management | สมาชิกสามารถสร้างห้องสตรีมมิ่งใหม่ได้ โดยกำหนดชื่อห้อง รายละเอียด และการตั้งค่าความเป็นส่วนตัว (Public / Passcode Protected) | High |
 | **FR-07** | Room Management | ระบบสร้างรหัสห้องที่ไม่ซ้ำกันเป็นตัวเลข 8 หลัก (8-digit Unique Room Code เช่น `18492043`) เพื่อใช้ค้นหาห้อง หรือใช้เป็น URL ลิงก์สำหรับแชร์ให้ผู้ชมเข้าห้องได้ทันที | High |
-| **FR-08** | Room Management | Host สามารถแก้ไขข้อมูลห้อง หรือสั่งปิดห้อง (End Room) ซึ่งจะนำผู้ใช้ออกจากห้องและเปลี่ยนสถานะเป็น Ended | High |
+| **FR-08** | Room Management | Host สามารถแก้ไขข้อมูลห้อง หรือสั่งปิดห้อง (End Room) ซึ่งจะนำผู้ใช้ออกจากห้องและลบข้อมูลห้องออกจากระบบอย่างสมบูรณ์ | High |
 | **FR-09** | Host Control | ผู้สร้างห้อง (Host) เป็นผู้มีสิทธิ์ขาดเพียงคนเดียวในการควบคุมวิดีโอ (สั่ง Play, Pause, Seek/ข้ามเวลา, Volume, Playback Speed) | High |
 | **FR-10** | Real-time Synchronization | เมื่อ Host ดำเนินการควบคุมวิดีโอ ระบบจะส่ง Event ผ่าน Socket.io ไปยัง Backend และทำการ Broadcast สถานะการเล่นไปยังผู้ชมทุกคนในห้องเดียวกันแบบเรียลไทม์ | High |
 | **FR-11** | Late-Joiner Sync | เมื่อมีผู้ชมใหม่เข้าร่วมห้อง ระบบจะส่งสถานะปัจจุบันของวิดีโอ (Current Video, Time Offset, Playing State, Speed) ให้ผู้ใช้ใหม่ซิงค์ทันทีโดยไม่ต้องรอ Host สั่งการ | High |
@@ -275,7 +275,7 @@ erDiagram
         varchar(150) title "ชื่อห้องสตรีม"
         text description "คำอธิบายห้อง"
         int host_id "ผู้สร้างห้อง"
-        enum status "active / ended"
+        enum status "active"
         enum media_type "none / youtube / local_file"
         int current_media_id "มีเดียที่กำลังเล่นอยู่"
         boolean is_private "สถานะห้องส่วนตัว"
@@ -283,7 +283,7 @@ erDiagram
         int max_participants "จำนวนผู้ชมสูงสุด"
         datetime created_at "เวลาที่สร้างห้อง"
         datetime updated_at "เวลาที่อัปเดตห้อง"
-        datetime ended_at "เวลาที่ปิดห้อง"
+
     }
 
     MEDIA {
@@ -369,7 +369,6 @@ erDiagram
 | `title` | `VARCHAR(150)` | NO | - | ชื่อห้องสตรีมมิ่งที่แสดงใน Room Directory |
 | `description` | `TEXT` | YES | NULL | คำอธิบายรายละเอียดเกี่ยวกับห้องหรือวิดีโอ |
 | `host_id` | `INT` | NO | - | ผู้สร้างห้องที่มีสิทธิ์ Host Control |
-| `status` | `ENUM('active', 'ended')` | NO | DEFAULT `'active'` | สถานะของห้อง (กำลังเปิดอยู่ หรือ ปิดแล้ว) |
 | `media_type` | `ENUM('none', 'youtube', 'local_file')` | NO | DEFAULT `'none'` | ชนิดของสื่อที่กำลังสตรีมอยู่ขณะนี้ |
 | `current_media_id` | `INT` | YES | NULL | อ้างอิงวิดีโอปัจจุบันที่กำลังเล่น |
 | `is_private` | `BOOLEAN` | NO | DEFAULT `FALSE` | ห้องส่วนตัว (ต้องใส่รหัสผ่านก่อนเข้า) |
@@ -377,7 +376,7 @@ erDiagram
 | `max_participants` | `INT` | NO | DEFAULT `50` | จำนวนผู้ชมสูงสุดที่อนุญาตในห้อง |
 | `created_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP` | วันเวลาที่สร้างห้อง |
 | `updated_at` | `DATETIME` | NO | DEFAULT `CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | วันเวลาที่มีการแก้ไขข้อมูลห้อง |
-| `ended_at` | `DATETIME` | YES | NULL | วันเวลาที่ Host สั่งปิดห้อง |
+
 
 ---
 
@@ -408,7 +407,7 @@ erDiagram
 #### 3.1 สรุปรูปแบบ Key และชนิดข้อมูลบน Redis (Redis Key Summary)
 | รูปแบบ Key (Key Pattern) | ชนิดข้อมูล (Data Type) | คำสั่งหลัก (Commands) | วัตถุประสงค์และการทำงาน | นโยบายการหมดอายุ (TTL / Expiration) |
 | :--- | :--- | :--- | :--- | :--- |
-| `room:{roomId}:playback` | **Hash** | `HSET`, `HGETALL`, `HMSET`, `EXPIRE` | ซิงค์สถานะการเล่นวิดีโอปัจจุบัน (เวลา, เล่น/หยุด, ความเร็ว, เสียง) ส่งให้ผู้ชมทุกคนและ Late-joiner | ลบเมื่อปิดห้อง (`status = 'ended'`) หรือตั้ง TTL 24 ชม. |
+| `room:{roomId}:playback` | **Hash** | `HSET`, `HGETALL`, `HMSET`, `EXPIRE` | ซิงค์สถานะการเล่นวิดีโอปัจจุบัน (เวลา, เล่น/หยุด, ความเร็ว, เสียง) ส่งให้ผู้ชมทุกคนและ Late-joiner | ลบเมื่อปิดห้อง หรือตั้ง TTL 24 ชม. |
 | `room:{roomId}:participants` | **Hash** | `HSET`, `HDEL`, `HGETALL`, `HVALS`, `HLEN` | บันทึกรายชื่อและสถานะของผู้ใช้ที่กำลังออนไลน์ในห้องแบบเรียลไทม์ (Field: `user:{userId}`) | ลบ Field เมื่อผู้ใช้ออกจากห้อง (`HDEL`) หรือลบ Key เมื่อปิดห้อง |
 | `room:{roomId}:messages` | **List** | `RPUSH`, `LTRIM`, `LRANGE` | จัดเก็บประวัติข้อความแชทล่าสุดในห้องแบบ Capped List (จำกัด 100 ข้อความล่าสุด) | ลบเมื่อปิดห้อง หรือตั้ง TTL 24 ชม. |
 | `socket:{socketId}:session` | **Hash** | `HSET`, `HGETALL`, `DEL` | แมป Socket ID กลับไปยัง `userId` และ `roomId` สำหรับจัดการ Disconnect แบบ $O(1)$ | ลบทันทีเมื่อ Socket Disconnect |

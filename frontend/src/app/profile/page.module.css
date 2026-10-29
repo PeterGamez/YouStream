@@ -197,6 +197,17 @@
   color: #7edb9a;
 }
 
+.sectionDivider {
+  margin: 32px 0 24px;
+  border-top: 1px solid rgba(244, 241, 233, 0.1);
+}
+
+.sectionHeader h2 {
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 520;
+}
+
 .signOutButton {
   margin-top: 22px;
   padding: 7px 0;
