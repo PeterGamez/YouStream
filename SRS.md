@@ -27,21 +27,6 @@
 
 ---
 
-## 🔗 ลิงก์ที่เกี่ยวข้อง (Important Deliverables Links)
-- **Production URL (Deployed App):** [แนบลิงก์ที่ Deploy จริง เช่น Vercel / Railway]
-- **GitHub Repository:** [Github](https://github.com/PeterGamez/YouStream)
-- **Figma Prototype:** [Figma](https://www.figma.com/design/m3WwqivIb8txZGfrrGvg5h/YouStream)
-- **Video Presentation & Demo:** [แนบลิงก์คลิป Unlisted เช่น YouTube / Google Drive]
-
-### 🔑 บัญชีสำหรับทดสอบระบบ (Test Accounts)
-| บทบาท (Role) | อีเมล / Username | รหัสผ่าน (Password) | สิทธิ์การเข้าถึง (Permissions) |
-| :--- | :--- | :--- | :--- |
-| Admin | `admin@youstream.app` | `Admin@1234` | จัดการผู้ใช้ทั้งหมด, ตรวจสอบและระงับห้องสตรีม, จัดการไฟล์วิดีโอบนระบบ |
-| Host (User) | `host@youstream.app` | `Host@1234` | สร้างห้อง, สิทธิ์ควบคุมวิดีโอ (Host Control), อัปโหลดไฟล์วิดีโอ, จัดการห้อง |
-| Viewer (User) | `viewer@youstream.app` | `Viewer@1234` | เข้าร่วมห้องสตรีม, ซิงค์การรับชม, ใช้งานแชทในห้อง, จัดการโปรไฟล์ |
-
----
-
 ## 🛠️ สถาปัตยกรรมและเทคโนโลยีที่ใช้ (Tech Stack)
 - **Frontend:** 
   - Framework: [Next.js](https://nextjs.org/) (App Router, React 19)
