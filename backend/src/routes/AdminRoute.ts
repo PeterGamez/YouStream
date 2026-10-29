@@ -237,37 +237,38 @@ export default class AdminRoute implements RouteInterface {
             }
         });
 
-        this.app.post("/rooms/:id/end", async (c) => {
+        this.app.post("/rooms/:code/end", async (c) => {
             try {
-                const id = parseInt(c.req.param("id"), 10);
-                if (isNaN(id)) {
+                const code = c.req.param("code")
+                if (!Number(code)) {
                     return c.json({ error: "Invalid room ID" }, 400);
                 }
 
-                const room = await RoomModel.selectRoom(id);
+                const room = await RoomModel.selectRoomByCode(code);
                 if (!room) {
                     return c.json({ error: "Room not found" }, 404);
                 }
 
-                await RoomModel.endRoom(id);
+                await RoomModel.endRoom(room.id);
 
                 try {
-                    await RoomStateService.cleanupRoom(id);
+                    await RoomStateService.cleanupRoom(room.id);
                 } catch {
                     // ignore
                 }
 
                 try {
-                    RoomSocket.endRoom(id, "Room terminated by administrator");
+                    RoomSocket.endRoom(room.id, "Room terminated by administrator");
                 } catch {
                     // ignore
                 }
 
-                this.server.log("Admin Route", `Room ${id} terminated by admin`);
+                this.server.log("Admin Route", `Room ${room.id} terminated by admin`);
 
                 return c.json({
                     message: "Room terminated by administrator",
-                    roomId: id,
+                    roomId: room.id,
+                    roomCode: room.roomCode,
                     endedAt: new Date().toISOString(),
                 });
             } catch (error) {
